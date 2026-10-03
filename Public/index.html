@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WorkBuddy</title><link rel="stylesheet" href="/style.css"></head>
+<body>
+<!-- AUTH -->
+<main id="auth" class="app hidden" style="justify-content:center">
+  <div class="card glass">
+    <h1>WorkBuddy</h1>
+    <div class="tabs"><button class="btn" id="tLogin">Log in</button><button class="btn alt" id="tSignup">Sign up</button></div>
+    <div id="signupFields" class="hidden" style="display:grid;gap:10px">
+      <input id="nick" placeholder="Nickname" maxlength="24" autocomplete="off">
+      <p class="note">Don't use your real name, for your safety.</p>
+      <input id="sid" placeholder="SID account number" autocomplete="off">
+      <input id="spass" type="password" placeholder="SPass password" autocomplete="off">
+      <p class="note">Your SPass is encrypted and only the bot can use it. Nobody can read it, including the admin.</p>
+    </div>
+    <div id="gbtn" style="display:flex;justify-content:center"></div>
+    <p class="err" id="authErr"></p>
+  </div>
+</main>
+
+<!-- APP -->
+<div id="app" class="app hidden">
+  <div class="side">
+    <div class="scrim hidden" id="scrim"></div>
+    <nav class="drawer glass" id="drawer">
+      <h2>Tools</h2>
+      <button class="item" data-p="schedule">Schedule the bot</button>
+      <button class="item" data-p="help">Ask an admin for help</button>
+      <button class="item" data-p="redeem">Add tokens</button>
+      <div style="flex:1"></div>
+      <button class="item" id="logout">Sign out</button>
+    </nav>
+  </div>
+  <div class="main">
+    <header class="top">
+      <button class="burger glass" id="burger" aria-label="Open tools"><i></i><i></i><i></i></button>
+      <div class="chip glass" id="tokens">Tokens: 0</div>
+    </header>
+    <section class="center">
+      <button class="go" id="go" disabled>Start WorkBuddy</button>
+      <p class="mute" id="status"></p>
+    </section>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal hidden" id="modal"><div class="card glass" id="modalBody"></div></div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="/app.js" defer></script>
+</body></html>

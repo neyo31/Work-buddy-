@@ -1,0 +1,40 @@
+const extractQuestions = require('./extract');
+const getGeminiAnswers = require('./gemini');
+const selectAnswer = require('./answer');
+const submitWorksheet = require('./submit');
+
+async function runWorker(page) {
+    let hasMorePages = true;
+
+    while (hasMorePages) {
+        // 1. Extract the current batch of questions
+        const questions = await extractQuestions(page);
+
+        if (!questions || questions.length === 0) {
+            console.log("No questions found on this page.");
+            break;
+        }
+
+        // 2. Loop through each question, get the answer from Gemini, and fill it in
+        for (let i = 0; i < questions.length; i++) {
+            const answerData = await getGeminiAnswers(questions[i]);
+            // answerData should provide the answer value and type
+            await selectAnswer(page, i, answerData.answer, answerData.type);
+        }
+
+        // 3. Check for a "Next Page" button to continue through multi-page worksheets
+        const nextButton = await page.$('.next-page-selector'); // Replace with your actual selector if different
+        if (nextButton) {
+            console.log("Moving to the next page...");
+            await nextButton.click();
+            await page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => {});
+        } else {
+            hasMorePages = false;
+        }
+    }
+
+    // 4. Once all pages are complete, handle finish, submit, and double confirmation
+    await submitWorksheet(page);
+}
+
+module.exports = runWorker;

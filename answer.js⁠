@@ -1,0 +1,21 @@
+async function selectAnswer(page, questionIndex, answer) {
+    console.log(`Selecting answer ${answer} for question ${questionIndex}...`);
+
+    try {
+        // Replace with the selector that finds the answer choices for a specific question
+        const choices = await page.$$(`.question-${questionIndex}-choice-selector`);
+
+        for (const choice of choices) {
+            const text = await page.evaluate(el => el.innerText.trim(), choice);
+            if (text.includes(answer)) {
+                await choice.click();
+                console.log(`Selected choice: ${answer}`);
+                break;
+            }
+        }
+    } catch (error) {
+        console.error("Error selecting the answer:", error);
+    }
+}
+
+module.exports = selectAnswer;

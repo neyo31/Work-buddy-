@@ -1,0 +1,40 @@
+const express = require('express');
+const puppeteer = require('puppeteer');
+const { GoogleGenAI } = require('@google/genai');
+
+const app = express();
+app.use(express.json());
+
+// Initialize Gemini SDK with the API key from environment variables
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+// Simple endpoint to test the bot logic
+app.post('/run-bot', async (req, res) => {
+  try {
+    // Launch headless browser with Puppeteer
+    const browser = await puppeteer.launch({ headless: true });
+    const page = await browser.newPage();
+
+    // Example: Navigate to a site (replace with your target URL)
+    await page.goto('https://example.com');
+    const title = await page.title();
+
+    await browser.close();
+
+    // Example call to Gemini using the recommended model
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `Analyze this webpage title and give a short summary: ${title}`,
+    });
+
+    res.json({ success: true, analysis: response.text });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Bot service running on port ${PORT}`);
+});

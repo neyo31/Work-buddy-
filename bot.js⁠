@@ -9,21 +9,26 @@ app.use(express.json());
 // Initialize Gemini SDK with the API key from environment
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// Simple endpoint to test the bot logic
+// Endpoint to trigger the bot logic
 app.post('/run-bot', async (req, res) => {
+    const { url, account, password } = req.body;
+
+    if (!url || !account || !password) {
+        return res.status(400).json({ success: false, error: "Missing required fields: url, account, or password." });
+    }
+
     try {
         // Launch headless browser with Puppeteer
         const browser = await puppeteer.launch({ headless: false });
         const page = await browser.newPage();
 
-        // Run the worker logic here
-        await runWorker(page);
+        // Run the worker logic, passing the dynamic credentials
+        await runWorker(page, { url, account, password });
 
         await browser.close();
-
-        res.json({ success: true, analysis: "Bot process completed successfully." });
+        res.json({ success: true, message: "Bot process completed successfully." });
     } catch (error) {
-        console.error(error);
+        console.error("Error executing bot:", error);
         res.status(500).json({ success: false, error: error.message });
     }
 });

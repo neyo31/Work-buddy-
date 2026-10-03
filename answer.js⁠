@@ -1,17 +1,37 @@
-async function selectAnswer(page, questionIndex, answer) {
-    console.log(`Selecting answer ${answer} for question ${questionIndex}...`);
+async function selectAnswer(page, questionIndex, answer, type) {
+    console.log(`Answering question ${questionIndex} with type ${type} and answer ${answer}...`);
 
     try {
-        // Replace with the selector that finds the answer choices for a specific question
-        const choices = await page.$$(`.question-${questionIndex}-choice-selector`);
-
-        for (const choice of choices) {
-            const text = await page.evaluate(el => el.innerText.trim(), choice);
-            if (text.includes(answer)) {
-                await choice.click();
-                console.log(`Selected choice: ${answer}`);
-                break;
+        if (type === 'choice') {
+            const choices = await page.$$(`.question-${questionIndex}-choice-selector`);
+            for (const choice of choices) {
+                const text = await page.evaluate(el => el.innerText.trim(), choice);
+                if (text.includes(answer)) {
+                    await choice.click();
+                    console.log(`Clicked choice: ${answer}`);
+                    break;
+                }
             }
+        } else if (type === 'dropdown') {
+            await page.waitForSelector(`.question-${questionIndex}-dropdown-selector`);
+            await page.select(`.question-${questionIndex}-dropdown-selector`, answer);
+            console.log(`Selected dropdown option: ${answer}`);
+        } else if (type === 'drag-and-drop') {
+            await page.waitForSelector(`.question-${questionIndex}-source-selector`);
+            await page.waitForSelector(`.question-${questionIndex}-target-selector`);
+            const source = await page.$(`.question-${questionIndex}-source-selector`);
+            const target = await page.$(`.question-${questionIndex}-target-selector`);
+            const sourceBoundingBox = await source.boundingBox();
+            const targetBoundingBox = await target.boundingBox();
+            await page.mouse.move(sourceBoundingBox.x + sourceBoundingBox.width / 2, sourceBoundingBox.y + sourceBoundingBox.height / 2);
+            await page.mouse.down();
+            await page.mouse.move(targetBoundingBox.x + targetBoundingBox.width / 2, targetBoundingBox.y + targetBoundingBox.height / 2);
+            await page.mouse.up();
+            console.log(`Dragged and dropped for answer: ${answer}`);
+        } else if (type === 'type') {
+            await page.waitForSelector(`.question-${questionIndex}-input-selector`);
+            await page.type(`.question-${questionIndex}-input-selector`, answer);
+            console.log(`Typed answer: ${answer}`);
         }
     } catch (error) {
         console.error("Error selecting the answer:", error);

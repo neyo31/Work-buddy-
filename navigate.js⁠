@@ -1,0 +1,30 @@
+const puppeteer = require('puppeteer');
+
+async function navigateToWorksheets(page) {
+    console.log("Navigating to subjects...");
+
+    // Replace with the selector for your subjects link or button
+    await page.waitForSelector('.subject-link-selector');
+    const subjects = await page.$$('.subject-link-selector');      for (let i = 0; i < subjects.length; i++) {         // Re-fetch elements to avoid stale element reference         const currentSubjects = await page.$$('.subject-link-selector');
+        await currentSubjects[i].click();
+
+        await page.waitForNavigation();
+        console.log(`Checking subject index ${i}`);
+
+        // Replace with the selector for worksheets within a subject
+        const worksheetExists = await page.$('.worksheet-link-selector');
+
+        if (worksheetExists) {
+            console.log("Worksheet found");
+            await worksheetExists.click();
+            await page.waitForNavigation();
+            break; // Exit loop once worksheet is found and opened
+        } else {
+            console.log("No worksheet in this subject, going back.");
+            await page.goBack();
+            await page.waitForNavigation();
+        }
+    }
+}
+
+module.exports = navigateToWorksheets;

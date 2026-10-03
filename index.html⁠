@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot Tester</title>
+</head>
+<body>
+    <h1>Trigger Bot</h1>
+    <button id="run-bot-btn">Run Bot</button>
+    <p id="result"></p>
+
+    <script>
+        document.getElementById('run-bot-btn').addEventListener('click', async () => {
+            const resultElement = document.getElementById('result');
+            resultElement.innerText = "Running bot...";
+
+            try {
+                const response = await fetch('https://work-buddy-2f6i.onrender.com/run-bot', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultElement.innerText = "Success: " + data.analysis;
+                } else {
+                    resultElement.innerText = "Error: " + data.error;
+                }
+            } catch (error) {
+                resultElement.innerText = "Fetch error: " + error.message;
+            }
+        });
+    </script>
+</body>
+</html>

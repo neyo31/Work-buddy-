@@ -16,7 +16,7 @@ app.post('/run-bot', async (req, res) => {
     const page = await browser.newPage();
 
     // Example: Navigate to a site (replace with your target URL)
-    await page.goto('https://example.com');
+    await page.goto(https://google.com);
     const title = await page.title();
 
     await browser.close();

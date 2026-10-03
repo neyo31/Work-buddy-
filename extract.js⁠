@@ -1,0 +1,16 @@
+async function extractQuestions(page) {
+    console.log("Extracting questions...");
+
+    // Replace with the selector for the question elements on your page
+    const questionSelector = '.question-text-selector';
+    await page.waitForSelector(questionSelector);
+
+    const questions = await page.$$eval(questionSelector, elements => 
+        elements.map(el => el.innerText.trim())
+    );
+
+    console.log(`Extracted ${questions.length} questions.`);
+    return questions;
+}
+
+module.exports = extractQuestions;

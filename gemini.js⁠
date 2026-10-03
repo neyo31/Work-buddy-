@@ -1,0 +1,24 @@
+const { GoogleGenAI } = require('@google/genai');
+require('dotenv').config();
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+async function getAnswerFromGemini(question) {
+    console.log("Asking Gemini for the answer...");
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `Answer the following question. Provide only the answer choices like A, B, C, or D: ${question}`,
+        });
+
+        const answer = response.text.trim();
+        console.log("Answer received from Gemini:", answer);
+        return answer;
+    } catch (error) {
+        console.error("Error communicating with Gemini:", error);
+        return null;
+    }
+}
+
+module.exports = getAnswerFromGemini;

@@ -1,1 +1,8 @@
-{ "name": "workbuddy", "version": "1.0.0", "type": "module", "private": true }
+{
+  "name": "work-buddy",
+  "version": "1.0.0",
+  "description": "Subscription website and admin panel for the Work Buddy bot",
+  "private": true,
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=22.13" }
+}

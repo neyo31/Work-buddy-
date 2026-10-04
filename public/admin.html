@@ -1,23 +1,15 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex"><title>WorkBuddy admin</title><link rel="stylesheet" href="/style.css"></head>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Work Buddy admin</title>
+  <meta name="theme-color" content="#0a131b">
+  <link rel="stylesheet" href="/style.css">
+</head>
 <body>
-<main id="login" class="app" style="justify-content:center"><div class="card glass"><h1>Admin</h1><p class="note">Sign in with the admin Google account.</p><div id="gbtn" style="display:flex;justify-content:center"></div><p class="err" id="err"></p></div></main>
-<main id="panel" class="admin hidden">
-  <div class="card glass"><h2>Connections</h2>
-    <label class="note">Bot URL (the website starts your bot here)</label><input id="botUrl" placeholder="https://...">
-    <label class="note">Subscription URL (where users buy tokens)</label><input id="subUrl" placeholder="https://...">
-    <div class="row"><div style="flex:1"><label class="note">Weekday start time</label><input id="wstart" type="time"></div><div style="flex:1"><label class="note">Time zone</label><input id="tz" placeholder="America/New_York"></div></div>
-    <div class="row"><button class="btn" id="saveSet">Save</button><span class="note" id="setMsg"></span></div>
-  </div>
-  <div class="card glass"><h2>Accounts</h2><div class="scroll"><table><thead><tr><th>Nickname</th><th>SID</th><th>Email</th><th>Tokens</th><th>Status</th><th></th></tr></thead><tbody id="users"></tbody></table></div></div>
-  <div class="card glass"><h2>Requests</h2><div class="scroll"><table><thead><tr><th>From</th><th>Type</th><th>Message</th><th>Status</th><th></th></tr></thead><tbody id="reqs"></tbody></table></div></div>
-  <div class="card glass"><h2>Close the website</h2>
-    <p class="note">Emails you a backup first, then deletes all accounts and locks the site for everyone. This cannot be undone.</p>
-    <button class="btn danger" id="openDel">Delete everything…</button>
-  </div>
-</main>
-<div class="modal hidden" id="modal"><div class="card glass" id="mb"></div></div>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="/admin.js" defer></script>
-</body></html>
+  <div id="app"></div>
+  <script src="/admin.js"></script>
+</body>
+</html>

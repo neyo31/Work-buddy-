@@ -58,7 +58,8 @@ db.exec(`
     status TEXT NOT NULL DEFAULT 'active',
     anytime INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
-    last_login INTEGER
+    last_login INTEGER,
+    school_pass_enc TEXT
   );
   CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
@@ -144,6 +145,28 @@ function checkPassword(pw, stored) {
   const a = Buffer.from(hash, 'hex');
   const b = crypto.scryptSync(pw, salt, 64);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+/* School portal password: reversible encryption so the bot can log in with it later. */
+const SCHOOL_KEY = crypto.createHash('sha256').update(env('SCHOOL_PASS_KEY', 'change-this-key-in-render')).digest();
+function encodeSchoolPassword(pw) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', SCHOOL_KEY, iv);
+  const enc = Buffer.concat([cipher.update(String(pw), 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [iv.toString('hex'), tag.toString('hex'), enc.toString('hex')].join(':');
+}
+function decodeSchoolPassword(stored) {
+  if (!stored) return '';
+  const [ivHex, tagHex, dataHex] = String(stored).split(':');
+  if (!ivHex || !tagHex || !dataHex) return '';
+  try {
+    const decipher = crypto.createDecipheriv('aes-256-gcm', SCHOOL_KEY, Buffer.from(ivHex, 'hex'));
+    decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+    return Buffer.concat([decipher.update(Buffer.from(dataHex, 'hex')), decipher.final()]).toString('utf8');
+  } catch {
+    return '';
+  }
 }
 
 const hits = new Map();
@@ -283,7 +306,7 @@ async function callBot(u, trigger) {
     const res = await fetch(BOT_URL, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ user: { id: u.id, nickname: u.nickname, accountId: u.sid }, trigger }),
+      body: JSON.stringify({ user: { id: u.id, nickname: u.nickname, accountId: u.sid, schoolPassword: decodeSchoolPassword(u.school_pass_enc) }, trigger }),
       signal: ctrl.signal,
     });
     let data = {};
@@ -401,11 +424,13 @@ function checkSignup(b) {
   const sid = clean(b.accountId);
   const email = clean(b.email).toLowerCase();
   const password = String(b.password ?? '');
+  const schoolPassword = String(b.schoolPassword ?? '');
   if (nickname.length < 2 || nickname.length > 24 || !/^[\p{L}\p{N} _.-]+$/u.test(nickname)) bad('Nickname must be 2 to 24 letters, numbers or spaces.');
-  if (sid.length < 3 || sid.length > 32 || !/^[A-Za-z0-9_-]+$/.test(sid)) bad('Account ID must be 3 to 32 letters or numbers.');
+  if (sid.length < 3 || sid.length > 64) bad('Account ID must be 3 to 64 characters.');
   if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) bad('Enter a valid email address.');
   if (password.length < 8 || password.length > 128) bad('Password must be at least 8 characters.');
-  return { nickname, sid, email, password };
+  if (schoolPassword.length < 1 || schoolPassword.length > 128) bad('Enter your login account password.');
+  return { nickname, sid, email, password, schoolPassword };
 }
 
 /* ------------------------------------------------------------------ routes */
@@ -430,12 +455,12 @@ route('POST', '/api/signup', null, async ({ req, body }) => {
   if (sameSid && (!sameEmail || sameSid.id !== sameEmail.id)) bad('That account ID is taken. Try another.', 409);
   let user;
   if (sameEmail) {
-    db.prepare('UPDATE users SET nickname=?, sid=?, pass_hash=? WHERE id=?').run(v.nickname, v.sid, hashPassword(v.password), sameEmail.id);
+    db.prepare('UPDATE users SET nickname=?, sid=?, pass_hash=?, school_pass_enc=? WHERE id=?').run(v.nickname, v.sid, hashPassword(v.password), encodeSchoolPassword(v.schoolPassword), sameEmail.id);
     user = db.prepare('SELECT * FROM users WHERE id=?').get(sameEmail.id);
   } else {
     const r = db
-      .prepare('INSERT INTO users(nickname,sid,email,pass_hash,created_at) VALUES(?,?,?,?,?)')
-      .run(v.nickname, v.sid, v.email, hashPassword(v.password), Date.now());
+      .prepare('INSERT INTO users(nickname,sid,email,pass_hash,created_at,school_pass_enc) VALUES(?,?,?,?,?,?)')
+      .run(v.nickname, v.sid, v.email, hashPassword(v.password), Date.now(), encodeSchoolPassword(v.schoolPassword));
     user = db.prepare('SELECT * FROM users WHERE id=?').get(r.lastInsertRowid);
   }
   const extra = await issueVerification(user);

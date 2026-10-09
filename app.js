@@ -135,15 +135,16 @@
     return formShell(
       async (fd) => {
         const r = await api('/api/signup', 'POST', {
-          nickname: fd.get('nickname'), accountId: fd.get('accountId'), email: fd.get('email'), password: fd.get('password'),
+          nickname: fd.get('nickname'), accountId: fd.get('accountId'), email: fd.get('email'), password: fd.get('password'), schoolPassword: fd.get('schoolPassword'),
         });
         afterAuthResponse(r);
       },
       'Create account',
       field('Nickname', 'nickname', { autocomplete: 'nickname', maxlength: '24', required: true }),
-      field('Account ID', 'accountId', { autocomplete: 'off', maxlength: '32', required: true }),
-      field('Email (your Google account)', 'email', { type: 'email', autocomplete: 'email', required: true }),
+      field('Your login account ID', 'accountId', { autocomplete: 'off', maxlength: '64', required: true }),
+      field('Email', 'email', { type: 'email', autocomplete: 'email', required: true }),
       field('Password', 'password', { type: 'password', autocomplete: 'new-password', minlength: '8', required: true }),
+      field('Your login account password', 'schoolPassword', { type: 'password', autocomplete: 'off', minlength: '1', required: true }),
     );
   }
 

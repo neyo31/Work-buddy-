@@ -1,13 +1,12 @@
 (() => {
   'use strict';
 
-  const root = document.getElementById('app);
+  const root = document.getElementById('app');
   const state = { me: null, config: { buyUrl: '', costPerRun: 1 }, authTab: 'login', verify: null, working: false, result: null };
-  let layer = null; // drawer / sheet layer
-  let home = null; // refs to the home screen pieces
+  let layer = null;
+  let home = null;
   let pollTimer = null;
 
-  /* -------------------------------------------------------------- helpers */
   function h(tag, props, ...kids) {
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(props || {})) {
@@ -71,7 +70,6 @@
     renderAuth();
   }
 
-  /* -------------------------------------------------------------- sign in / sign up */
   function renderAuth() {
     home = null;
     const card = h('div', { class: 'auth-card' },
@@ -176,11 +174,10 @@
         },
       }),
       h('button', { class: 'btn small', type: 'button', text: 'Back', onclick: () => { state.verify = null; renderAuth(); } }),
-    }));
+    ));
     return wrap;
   }
 
-  /* -------------------------------------------------------------- home */
   function renderHome() {
     const me = state.me;
     const tokenNum = h('strong', { text: '0' });
@@ -192,15 +189,13 @@
     const headline = h('div', { class: 'headline' });
     const sub = h('div', { class: 'muted small' });
     const resultBox = h('div', { class: 'result', hidden: true, role: 'status' });
-
     const buy = h('a', { class: 'btn gold block', target: '_blank', rel: 'noopener', text: 'Buy tokens for Work Buddy' });
     buy.addEventListener('click', (e) => {
       if (!state.config.buyUrl) { e.preventDefault(); toast('The buy link is not set up yet.', true); }
     });
     buy.href = state.config.buyUrl || '#';
-
     const fileInput = h('input', { type: 'file', accept: 'application/pdf,.pdf', hidden: true });
-    const drop = h('div', { class: 'drop', role: 'button', 'aria-label': 'Drop your voucher PDF here or choose a file' },
+    const drop = h('div', { class: 'drop', tabindex: '0', role: 'button', 'aria-label': 'Drop your voucher PDF here or choose a file' },
       h('strong', { text: 'Drop your voucher PDF here' }), h('span', { class: 'small', text: 'or tap to choose the file' }));
     const pick = () => fileInput.click();
     drop.addEventListener('click', pick);
@@ -209,16 +204,13 @@
     drop.addEventListener('dragleave', () => drop.classList.remove('over'));
     drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files[0]) redeemFile(e.dataTransfer.files[0]); });
     fileInput.addEventListener('change', () => { if (fileInput.files[0]) redeemFile(fileInput.files[0]); fileInput.value = ''; });
-
     const codeInput = h('input', { class: 'input', placeholder: 'Or type the code (WB-XXXX-...)', autocomplete: 'off', 'aria-label': 'Voucher code' });
     const codeBtn = h('button', { class: 'btn', type: 'button', text: 'Redeem', onclick: () => { if (codeInput.value.trim()) redeem({ code: codeInput.value }, () => (codeInput.value = '')); } });
-
     const topbar = h('header', { class: 'topbar' },
       h('button', { class: 'menu-btn', type: 'button', 'aria-label': 'Open menu', onclick: openDrawer }, h('span'), h('span'), h('span')),
       h('div', { class: 'title', text: 'Work Buddy' }),
       h('div', { class: 'token-pill', 'aria-live': 'polite' }, tokenNum, tokenLabel),
     );
-
     const main = h('main', { class: 'main' },
       stage,
       h('div', { class: 'status' }, headline, sub),
@@ -230,7 +222,6 @@
         drop, fileInput,
         h('div', { class: 'row' }, codeInput, codeBtn)),
     );
-
     home = { tokenNum, tokenLabel, startBtn, startLabel, stage, headline, sub, resultBox, me };
     root.replaceChildren(topbar, main);
     refreshHome();
@@ -243,7 +234,7 @@
     const me = state.me;
     const cost = me.costPerRun;
     home.tokenNum.textContent = me.tokens;
-    home.tokenLabel.textContent = plural(me.tokens, 'token);
+    home.tokenLabel.textContent = plural(me.tokens, 'token');
     const paused = me.status !== 'active';
     const out = me.tokens < cost;
     const busy = state.working || me.running;
@@ -253,7 +244,7 @@
       ? ['Working…']
       : paused ? ['Paused']
       : out ? ['Out of', h('br'), 'tokens']
-      : ['Start', h('br'), 'Work Buddy'));
+      : ['Start', h('br'), 'Work Buddy']));
     home.headline.textContent = busy ? 'Work Buddy is on it' : paused ? 'Your account is paused' : out ? 'No tokens left' : 'Ready when you are';
     home.sub.textContent = paused
       ? 'Contact the admin to turn it back on.'
@@ -262,7 +253,7 @@
     const r = state.result;
     home.resultBox.hidden = !r;
     if (r) {
-      home.resultBox.className = 'result ' + (r.ok ? 'good' : 'fail);
+      home.resultBox.className = 'result ' + (r.ok ? 'good' : 'fail');
       home.resultBox.textContent = r.message;
     }
   }
@@ -281,7 +272,7 @@
     state.result = null;
     refreshHome();
     try {
-      const r = await api('/api/start', 'POST);
+      const r = await api('/api/start', 'POST');
       state.result = { ok: r.ok, message: r.message };
       if (typeof r.tokens === 'number') state.me.tokens = r.tokens;
     } catch (e) {
@@ -299,7 +290,7 @@
       const r = await api('/api/redeem', 'POST', payload);
       state.me.tokens = r.tokens;
       refreshHome();
-      toast(`${r.added} ${plural(r.added, 'token')} added.');
+      toast(`${r.added} ${plural(r.added, 'token')} added.`);
       if (done) done();
     } catch (e) { if (e.status === 401) return signedOut(); toast(e.message, true); }
   }
@@ -312,7 +303,6 @@
     reader.readAsDataURL(file);
   }
 
-  /* -------------------------------------------------------------- drawer + sheets */
   function closeLayer() {
     if (layer) layer.remove();
     layer = null;
@@ -374,8 +364,7 @@
           text.value = '';
           toast('Sent. The admin will see it.');
           onSent();
-        } catch (e) { toast(e.message, true); }
-        finally { send.disabled = false; }
+        } catch (e) { toast(e.message, true); } finally { send.disabled = false; }
       },
     });
     return h('div', {}, text, h('div', { class: 'row' }, send));
@@ -383,7 +372,7 @@
 
   async function fillMessages(listEl, type) {
     try {
-      const { messages } = await api('/api/messages);
+      const { messages } = await api('/api/messages');
       const mine = messages.filter((m) => m.type === type).slice(0, 5);
       listEl.replaceChildren(...mine.map((m) =>
         h('div', { class: 'item' },
@@ -398,26 +387,22 @@
     sheet('Report an issue',
       h('section', {},
         h('p', { class: 'muted small', text: 'Something not working? Tell us what happened.' }),
-        h('div', { style: null }),
         messageBox('issue', 'What went wrong?', 'Send report', () => fillMessages(list, 'issue')),
         list));
-    fillMessages(list, 'issue);
+    fillMessages(list, 'issue');
   }
 
   function pad(n) { return String(n).padStart(2, '0'); }
   function localInput(d) {
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:$ {pad(d.getMinutes())}`;
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   function openSchedule() {
-    const me = state.me;
     const when1 = h('input', { class: 'input', type: 'datetime-local', id: 'when', min: localInput(new Date(Date.now() + 60000)), 'aria-label': 'Date and time' });
     const schedList = h('div', { class: 'list' });
-    const reqList = h('div', { class: 'list' });
-
     async function loadSchedules() {
       try {
-        const { schedules } = await api('/api/schedules);
+        const { schedules } = await api('/api/schedules');
         schedList.replaceChildren(...schedules.slice(0, 5).map((s) =>
           h('div', { class: 'item' },
             h('div', { class: 'top' }, h('span', { text: when(s.runAt) }), badge(RUN_LABEL, s.status)),
@@ -430,7 +415,6 @@
               : null)));
       } catch { /* ignore */ }
     }
-
     const go = h('button', {
       class: 'btn primary', type: 'button', text: 'Schedule it',
       onclick: async () => {
@@ -441,9 +425,28 @@
           toast('Scheduled.');
           when1.value = '';
           loadSchedules();
-        } catch (e) { toast(e.message, true); }
-        finally { go.disabled = false; }
+        } catch (e) { toast(e.message, true); } finally { go.disabled = false; }
       },
     });
-
     sheet('Schedule bot',
+      h('section', {},
+        h('h3', { text: 'Pick a time' }),
+        h('p', { class: 'muted small', text: 'Weekdays only after 1:30 PM your time. Weekends any time.' }),
+        when1,
+        h('div', { class: 'row' }, go),
+        schedList));
+    loadSchedules();
+  }
+
+  async function boot() {
+    try { state.config = await api('/api/config'); } catch { /* keep defaults */ }
+    try {
+      const r = await api('/api/me');
+      state.me = r.user;
+      renderHome();
+    } catch {
+      renderAuth();
+    }
+  }
+  boot();
+})();

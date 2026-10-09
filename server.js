@@ -432,9 +432,22 @@ route('POST', '/api/messages', 'user', ({ user, body }) => {
 });
 route('POST', '/api/admin/login', null, ({ req, res, body }) => {
   limit('alogin|' + clientIp(req), 8, 15 * 60000);
+  seedAdmin();
   const id = clean(body.identifier).toLowerCase();
-  const user = db.prepare('SELECT * FROM users WHERE (email = ? OR sid = ? OR lower(nickname) = ?) AND role = ?').get(id, id, id, 'admin');
-  if (!user || !checkPassword(String(body.password ?? '').trim(), user.pass_hash)) bad('Wrong login or password.', 401);
+  const typed = String(body.password ?? '').trim();
+  const envEmail = env('ADMIN_EMAIL').toLowerCase();
+  const envPass = env('ADMIN_PASSWORD');
+  const envSid = (env('ADMIN_SID', 'admin') || 'admin').toLowerCase();
+  const envNick = (env('ADMIN_NICKNAME', 'admin') || 'admin').toLowerCase();
+  const matchesEnv = envEmail && envPass && (id === envEmail || id === envSid || id === envNick) && typed === envPass;
+  let user = db.prepare('SELECT * FROM users WHERE (email = ? OR sid = ? OR lower(nickname) = ?) AND role = ?').get(id, id, id, 'admin');
+  if (!user && matchesEnv) user = db.prepare("SELECT * FROM users WHERE role = 'admin' ORDER BY id LIMIT 1").get();
+  const ok = !!user && (checkPassword(typed, user.pass_hash) || matchesEnv);
+  console.log('Admin login ->', { id, envEmail: envEmail || '(empty)', envPassLen: envPass.length, typedLen: typed.length, found: !!user, ok });
+  if (!ok) bad('Wrong login or password.', 401);
+  if (matchesEnv && !checkPassword(typed, user.pass_hash)) {
+    db.prepare('UPDATE users SET pass_hash = ?, email = ?, verified = 1, status = ?, role = ? WHERE id = ?').run(hashPassword(envPass), envEmail, 'active', 'admin', user.id);
+  }
   setCookie(res, COOKIE_NAME.admin, newSession(user.id, 'admin', 12 * 3600000), 12 * 3600);
   return { ok: true };
 });
@@ -570,6 +583,7 @@ function seedAdmin() {
   const email = env('ADMIN_EMAIL').toLowerCase();
   const password = env('ADMIN_PASSWORD');
   if (!email || !password) { console.warn('No ADMIN_EMAIL / ADMIN_PASSWORD set, so there is no admin account yet.'); return; }
+  if (password.length < 8) console.warn('ADMIN_PASSWORD is shorter than 8 characters. Login will still accept it, but set a longer one in Render.');
   const nickname = env('ADMIN_NICKNAME', 'admin') || 'admin';
   let sid = env('ADMIN_SID', 'admin') || 'admin';
   console.log('Admin login -> email: ' + email + ' | ID: ' + sid + ' | password length: ' + password.length);

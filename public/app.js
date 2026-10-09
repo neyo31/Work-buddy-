@@ -122,10 +122,25 @@
 
   function loginForm() {
     return formShell(
-      async (fd) => afterAuthResponse(await api('/api/login', 'POST', { identifier: fd.get('identifier'), password: fd.get('password') })),
+      async (fd) => {
+        const identifier = fd.get('identifier');
+        const password = fd.get('password');
+        try {
+          afterAuthResponse(await api('/api/login', 'POST', { identifier, password }));
+        } catch (userErr) {
+          try {
+            await api('/api/admin/login', 'POST', { identifier, password });
+            window.location.href = '/admin';
+            return;
+          } catch {
+            throw userErr;
+          }
+        }
+      },
       'Log in',
       field('Email or account ID', 'identifier', { autocomplete: 'username', required: true }),
       field('Password', 'password', { type: 'password', autocomplete: 'current-password', required: true }),
+      h('a', { href: '/admin', class: 'muted small', text: 'Admin panel' }),
     );
   }
 

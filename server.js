@@ -204,17 +204,19 @@ const publicUser = (u) => ({ id: u.id, nickname: u.nickname, accountId: u.sid, e
 async function sendCodeEmail(email, code) {
   const subject = 'Your Work Buddy code';
   const text = `Your Work Buddy verification code is ${code}. It expires in 10 minutes.`;
-  if (BREVO_KEY && BREVO_FROM) {
+  const brevoKey = BREVO_KEY || (RESEND_KEY.startsWith('xkeysib-') ? RESEND_KEY : '');
+  const from = BREVO_FROM || MAIL_FROM;
+  if (brevoKey && from) {
     const r = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
-      headers: { 'api-key': BREVO_KEY, 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({ sender: { name: 'Work Buddy', email: BREVO_FROM }, to: [{ email }], subject, textContent: text }),
+      headers: { 'api-key': brevoKey, 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ sender: { name: 'Work Buddy', email: from }, to: [{ email }], subject, textContent: text }),
     });
     if (r.ok) return true;
     const detail = await r.text().catch(() => '');
     console.log('Brevo send failed', r.status, detail.slice(0, 300));
   }
-  if (RESEND_KEY && MAIL_FROM) {
+  if (RESEND_KEY && !RESEND_KEY.startsWith('xkeysib-') && MAIL_FROM) {
     const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + RESEND_KEY, 'content-type': 'application/json' }, body: JSON.stringify({ from: MAIL_FROM, to: [email], subject, text }) });
     if (r.ok) return true;
     const detail = await r.text().catch(() => '');

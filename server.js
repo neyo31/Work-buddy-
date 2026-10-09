@@ -42,6 +42,8 @@ const COST = Math.max(1, Number(env('COST_PER_RUN', '1')));
 const TRIAL_TOKENS = Math.max(0, Number(env('TRIAL_TOKENS', '1')));
 const RESEND_KEY = env('RESEND_API_KEY');
 const MAIL_FROM = env('MAIL_FROM');
+const BREVO_KEY = env('BREVO_API_KEY');
+const BREVO_FROM = env('BREVO_FROM', MAIL_FROM);
 const DATA_DIR = env('DATA_DIR', path.join(__dirname, 'data'));
 const PUBLIC = path.join(__dirname, 'public');
 
@@ -200,19 +202,32 @@ function endSession(req, res, kind) {
 const running = new Set();
 const publicUser = (u) => ({ id: u.id, nickname: u.nickname, accountId: u.sid, email: u.email, tokens: u.tokens, status: u.status, anytime: !!u.anytime, costPerRun: COST, running: running.has(u.id) });
 async function sendCodeEmail(email, code) {
-  if (RESEND_KEY && MAIL_FROM) {
-    const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + RESEND_KEY, 'content-type': 'application/json' }, body: JSON.stringify({ from: MAIL_FROM, to: [email], subject: 'Your Work Buddy code', text: `Your Work Buddy verification code is ${code}. It expires in 10 minutes.` }) });
-    if (!r.ok) bad('We could not send the email. Try again in a minute.', 502);
-    return true;
+  const subject = 'Your Work Buddy code';
+  const text = `Your Work Buddy verification code is ${code}. It expires in 10 minutes.`;
+  if (BREVO_KEY && BREVO_FROM) {
+    const r = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'api-key': BREVO_KEY, 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ sender: { name: 'Work Buddy', email: BREVO_FROM }, to: [{ email }], subject, textContent: text }),
+    });
+    if (r.ok) return true;
+    const detail = await r.text().catch(() => '');
+    console.log('Brevo send failed', r.status, detail.slice(0, 300));
   }
-  console.log(`[email not set up] verification code for ${email}: ${code}`);
+  if (RESEND_KEY && MAIL_FROM) {
+    const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { authorization: 'Bearer ' + RESEND_KEY, 'content-type': 'application/json' }, body: JSON.stringify({ from: MAIL_FROM, to: [email], subject, text }) });
+    if (r.ok) return true;
+    const detail = await r.text().catch(() => '');
+    console.log('Resend send failed', r.status, detail.slice(0, 300));
+  }
+  console.log(`[email not delivered] verification code for ${email}: ${code}`);
   return false;
 }
 async function issueVerification(user) {
   const code = String(crypto.randomInt(100000, 1000000));
   db.prepare(`INSERT INTO verifications(user_id,code_hash,expires,attempts,sent_at) VALUES(?,?,?,0,?) ON CONFLICT(user_id) DO UPDATE SET code_hash=excluded.code_hash, expires=excluded.expires, attempts=0, sent_at=excluded.sent_at`).run(user.id, sha(code), Date.now() + 10 * 60000, Date.now());
   const sent = await sendCodeEmail(user.email, code);
-  return DEV_MODE && !sent ? { devCode: code } : {};
+  return sent ? { sent: true } : { devCode: code, sent: false };
 }
 function validTz(tz) { try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return typeof tz === 'string' && tz.length < 64; } catch { return false; } }
 function localParts(ms, tz) {

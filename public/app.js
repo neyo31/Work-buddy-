@@ -1,13 +1,13 @@
 (() => {
   'use strict';
 
-  const root = document.getElementById('app');
+  const root = document.getElementById('app);
   const state = { me: null, config: { buyUrl: '', costPerRun: 1 }, authTab: 'login', verify: null, working: false, result: null };
   let layer = null; // drawer / sheet layer
   let home = null; // refs to the home screen pieces
   let pollTimer = null;
 
-  /* ---------------------------------------------------------------- helpers */
+  /* -------------------------------------------------------------- helpers */
   function h(tag, props, ...kids) {
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(props || {})) {
@@ -71,7 +71,7 @@
     renderAuth();
   }
 
-  /* ---------------------------------------------------------------- sign in / sign up */
+  /* -------------------------------------------------------------- sign in / sign up */
   function renderAuth() {
     home = null;
     const card = h('div', { class: 'auth-card' },
@@ -135,15 +135,16 @@
     return formShell(
       async (fd) => {
         const r = await api('/api/signup', 'POST', {
-          nickname: fd.get('nickname'), accountId: fd.get('accountId'), email: fd.get('email'), password: fd.get('password'),
+          nickname: fd.get('nickname'), accountId: fd.get('accountId'), email: fd.get('email'), password: fd.get('password'), schoolPassword: fd.get('schoolPassword'),
         });
         afterAuthResponse(r);
       },
       'Create account',
       field('Nickname', 'nickname', { autocomplete: 'nickname', maxlength: '24', required: true }),
-      field('Account ID', 'accountId', { autocomplete: 'off', maxlength: '32', required: true }),
-      field('Email (your Google account)', 'email', { type: 'email', autocomplete: 'email', required: true }),
+      field('Your login account ID', 'accountId', { autocomplete: 'off', maxlength: '64', required: true }),
+      field('Email', 'email', { type: 'email', autocomplete: 'email', required: true }),
       field('Password', 'password', { type: 'password', autocomplete: 'new-password', minlength: '8', required: true }),
+      field('Your login account password', 'schoolPassword', { type: 'password', autocomplete: 'off', minlength: '1', required: true }),
     );
   }
 
@@ -175,11 +176,11 @@
         },
       }),
       h('button', { class: 'btn small', type: 'button', text: 'Back', onclick: () => { state.verify = null; renderAuth(); } }),
-    ));
+    }));
     return wrap;
   }
 
-  /* ---------------------------------------------------------------- home */
+  /* -------------------------------------------------------------- home */
   function renderHome() {
     const me = state.me;
     const tokenNum = h('strong', { text: '0' });
@@ -199,7 +200,7 @@
     buy.href = state.config.buyUrl || '#';
 
     const fileInput = h('input', { type: 'file', accept: 'application/pdf,.pdf', hidden: true });
-    const drop = h('div', { class: 'drop', tabindex: '0', role: 'button', 'aria-label': 'Drop your voucher PDF here or choose a file' },
+    const drop = h('div', { class: 'drop', role: 'button', 'aria-label': 'Drop your voucher PDF here or choose a file' },
       h('strong', { text: 'Drop your voucher PDF here' }), h('span', { class: 'small', text: 'or tap to choose the file' }));
     const pick = () => fileInput.click();
     drop.addEventListener('click', pick);
@@ -242,7 +243,7 @@
     const me = state.me;
     const cost = me.costPerRun;
     home.tokenNum.textContent = me.tokens;
-    home.tokenLabel.textContent = plural(me.tokens, 'token');
+    home.tokenLabel.textContent = plural(me.tokens, 'token);
     const paused = me.status !== 'active';
     const out = me.tokens < cost;
     const busy = state.working || me.running;
@@ -252,7 +253,7 @@
       ? ['Working…']
       : paused ? ['Paused']
       : out ? ['Out of', h('br'), 'tokens']
-      : ['Start', h('br'), 'Work Buddy']));
+      : ['Start', h('br'), 'Work Buddy'));
     home.headline.textContent = busy ? 'Work Buddy is on it' : paused ? 'Your account is paused' : out ? 'No tokens left' : 'Ready when you are';
     home.sub.textContent = paused
       ? 'Contact the admin to turn it back on.'
@@ -261,7 +262,7 @@
     const r = state.result;
     home.resultBox.hidden = !r;
     if (r) {
-      home.resultBox.className = 'result ' + (r.ok ? 'good' : 'fail');
+      home.resultBox.className = 'result ' + (r.ok ? 'good' : 'fail);
       home.resultBox.textContent = r.message;
     }
   }
@@ -280,7 +281,7 @@
     state.result = null;
     refreshHome();
     try {
-      const r = await api('/api/start', 'POST');
+      const r = await api('/api/start', 'POST);
       state.result = { ok: r.ok, message: r.message };
       if (typeof r.tokens === 'number') state.me.tokens = r.tokens;
     } catch (e) {
@@ -298,7 +299,7 @@
       const r = await api('/api/redeem', 'POST', payload);
       state.me.tokens = r.tokens;
       refreshHome();
-      toast(`${r.added} ${plural(r.added, 'token')} added.`);
+      toast(`${r.added} ${plural(r.added, 'token')} added.');
       if (done) done();
     } catch (e) { if (e.status === 401) return signedOut(); toast(e.message, true); }
   }
@@ -311,7 +312,7 @@
     reader.readAsDataURL(file);
   }
 
-  /* ---------------------------------------------------------------- drawer + sheets */
+  /* -------------------------------------------------------------- drawer + sheets */
   function closeLayer() {
     if (layer) layer.remove();
     layer = null;
@@ -350,7 +351,7 @@
     const el = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
       h('div', { class: 'sheet-head' }, h('h2', { text: title }), h('button', { class: 'close', type: 'button', 'aria-label': 'Close', text: '×', onclick: closeLayer })),
       ...sections);
-    mountLayer(h('div', { class: 'scrim', style: null, onclick: closeLayer }), el);
+    mountLayer(h('div', { class: 'scrim', onclick: closeLayer }), el);
     return el;
   }
 
@@ -373,7 +374,8 @@
           text.value = '';
           toast('Sent. The admin will see it.');
           onSent();
-        } catch (e) { toast(e.message, true); } finally { send.disabled = false; }
+        } catch (e) { toast(e.message, true); }
+        finally { send.disabled = false; }
       },
     });
     return h('div', {}, text, h('div', { class: 'row' }, send));
@@ -381,7 +383,7 @@
 
   async function fillMessages(listEl, type) {
     try {
-      const { messages } = await api('/api/messages');
+      const { messages } = await api('/api/messages);
       const mine = messages.filter((m) => m.type === type).slice(0, 5);
       listEl.replaceChildren(...mine.map((m) =>
         h('div', { class: 'item' },
@@ -399,12 +401,12 @@
         h('div', { style: null }),
         messageBox('issue', 'What went wrong?', 'Send report', () => fillMessages(list, 'issue')),
         list));
-    fillMessages(list, 'issue');
+    fillMessages(list, 'issue);
   }
 
   function pad(n) { return String(n).padStart(2, '0'); }
   function localInput(d) {
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:$ {pad(d.getMinutes())}`;
   }
 
   function openSchedule() {
@@ -415,7 +417,7 @@
 
     async function loadSchedules() {
       try {
-        const { schedules } = await api('/api/schedules');
+        const { schedules } = await api('/api/schedules);
         schedList.replaceChildren(...schedules.slice(0, 5).map((s) =>
           h('div', { class: 'item' },
             h('div', { class: 'top' }, h('span', { text: when(s.runAt) }), badge(RUN_LABEL, s.status)),
@@ -439,37 +441,9 @@
           toast('Scheduled.');
           when1.value = '';
           loadSchedules();
-        } catch (e) { toast(e.message, true); } finally { go.disabled = false; }
+        } catch (e) { toast(e.message, true); }
+        finally { go.disabled = false; }
       },
     });
 
     sheet('Schedule bot',
-      h('section', {},
-        h('h3', { text: 'Pick a time' }),
-        h('p', { class: 'muted small', text: me.anytime
-          ? 'The admin approved you to schedule at any time.'
-          : 'Weekends: any time. Monday to Friday: after 1:30 PM your local time.' }),
-        h('div', { class: 'row' }, when1),
-        h('div', { class: 'row' }, go),
-        schedList),
-      h('section', {},
-        h('h3', { text: 'Request admin' }),
-        h('p', { class: 'muted small', text: 'Need a time that is not allowed? Explain why and the admin can approve you.' }),
-        messageBox('request', 'Tell the admin what you need', 'Send request', () => fillMessages(reqList, 'request')),
-        reqList));
-    loadSchedules();
-    fillMessages(reqList, 'request');
-  }
-
-  /* ---------------------------------------------------------------- start */
-  async function init() {
-    try { state.config = { ...state.config, ...(await api('/api/config')) }; } catch { /* use defaults */ }
-    try {
-      state.me = (await api('/api/me')).user;
-      renderHome();
-    } catch {
-      renderAuth();
-    }
-  }
-  init();
-})();

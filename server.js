@@ -1,8 +1,7 @@
 'use strict';
 /*
   Work Buddy - website + admin panel + token system.
-  No npm packages needed. Requires Node 22.13 or newer.
-  Start it with:  node server.js
+  Start: node server.js
 */
 const http = require('node:http');
 const fs = require('node:fs');
@@ -60,56 +59,13 @@ db.exec(`
     last_login INTEGER,
     school_pass_enc TEXT
   );
-  CREATE TABLE IF NOT EXISTS settings (
-    key TEXT PRIMARY KEY,
-    value TEXT
-  );
-  CREATE TABLE IF NOT EXISTS sessions (
-    token_hash TEXT PRIMARY KEY,
-    user_id INTEGER NOT NULL,
-    kind TEXT NOT NULL,
-    expires INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS verifications (
-    user_id INTEGER PRIMARY KEY,
-    code_hash TEXT NOT NULL,
-    expires INTEGER NOT NULL,
-    attempts INTEGER NOT NULL DEFAULT 0,
-    sent_at INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS codes (
-    code TEXT PRIMARY KEY,
-    tokens INTEGER NOT NULL,
-    created_at INTEGER NOT NULL,
-    used_by INTEGER,
-    used_at INTEGER
-  );
-  CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    type TEXT NOT NULL,
-    body TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'open',
-    reply TEXT,
-    created_at INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS schedules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    run_at INTEGER NOT NULL,
-    tz TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending',
-    result TEXT,
-    created_at INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS runs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    trigger TEXT NOT NULL,
-    success INTEGER NOT NULL,
-    message TEXT,
-    created_at INTEGER NOT NULL
-  );
+  CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);
+  CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, kind TEXT NOT NULL, expires INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS verifications (user_id INTEGER PRIMARY KEY, code_hash TEXT NOT NULL, expires INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, sent_at INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS codes (code TEXT PRIMARY KEY, tokens INTEGER NOT NULL, created_at INTEGER NOT NULL, used_by INTEGER, used_at INTEGER);
+  CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, type TEXT NOT NULL, body TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', reply TEXT, created_at INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS schedules (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, run_at INTEGER NOT NULL, tz TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', result TEXT, created_at INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS runs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, trigger TEXT NOT NULL, success INTEGER NOT NULL, message TEXT, created_at INTEGER NOT NULL);
 `);
 db.prepare("UPDATE schedules SET status='failed', result='The server restarted before this ran.' WHERE status='running'").run();
 
@@ -270,7 +226,7 @@ function scheduleAllowed(ms, tz, anytime) {
 }
 
 async function callBot(u, trigger) {
-  if (!BOT_URL()) { await sleep(1500); return { success: true, message: 'Demo mode: no bot is connected yet, so nothing real ran.' }; }
+  if (!BOT_URL()) { await sleep(1500); return { success: true, charge: false, message: 'Demo mode: no bot is connected yet, so nothing real ran.' }; }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), BOT_TIMEOUT);
   try {
@@ -285,7 +241,8 @@ async function callBot(u, trigger) {
     try { data = await res.json(); } catch { /* ignore */ }
     if (!res.ok) return { success: false, message: data.message || `The bot answered with an error (${res.status}).` };
     const ok = data.success === true;
-    return { success: ok, message: data.message || (ok ? 'Done.' : 'The bot could not finish the job.'), result: data.result };
+    const charge = ok && data.charge !== false;
+    return { success: ok, charge, message: data.message || (ok ? 'Done.' : 'The bot could not finish the job.'), result: data.result };
   } catch (e) {
     return { success: false, message: e.name === 'AbortError' ? 'The bot took too long to answer.' : 'Could not reach the bot.' };
   } finally { clearTimeout(timer); }
@@ -299,7 +256,7 @@ async function executeRun(userId, trigger) {
   running.add(userId);
   try {
     const r = await callBot(u, trigger);
-    if (r.success) db.prepare('UPDATE users SET tokens = tokens - ? WHERE id = ? AND tokens >= ?').run(COST, userId, COST);
+    if (r.success && r.charge !== false) db.prepare('UPDATE users SET tokens = tokens - ? WHERE id = ? AND tokens >= ?').run(COST, userId, COST);
     db.prepare('INSERT INTO runs(user_id,trigger,success,message,created_at) VALUES(?,?,?,?,?)').run(userId, trigger, r.success ? 1 : 0, r.message || '', Date.now());
     const fresh = db.prepare('SELECT tokens FROM users WHERE id = ?').get(userId);
     return { ok: r.success, message: r.message, tokens: fresh.tokens };
@@ -471,7 +428,7 @@ route('POST', '/api/schedules', 'user', ({ user, body }) => {
   if (runAt < Date.now() + 60000) bad('Pick a time at least a minute from now.');
   if (runAt > Date.now() + 30 * 86400000) bad('You can schedule up to 30 days ahead.');
   if (user.tokens < COST) bad('You need at least ' + COST + ' token to schedule Work Buddy.');
-  if (!scheduleAllowed(runAt, tz, user.anytime)) bad('On weekdays Work Buddy can be scheduled after 1:30 PM your local time. Weekends are open. Need another time? Send a request to the admin.');
+  if (!scheduleAllowed(runAt, tz, user.anytime)) bad('On weekdays Work Buddy can be scheduled after 1:30 PM your local time. Weekends are open.');
   if (db.prepare("SELECT COUNT(*) AS n FROM schedules WHERE user_id = ? AND status = 'pending'").get(user.id).n >= 5) bad('You can have up to 5 scheduled runs. Cancel one first.');
   db.prepare('INSERT INTO schedules(user_id,run_at,tz,created_at) VALUES(?,?,?,?)').run(user.id, runAt, tz, Date.now());
   return { ok: true };
@@ -666,11 +623,9 @@ function seedAdmin() {
   if (!email || !password) { console.warn('No ADMIN_EMAIL / ADMIN_PASSWORD set.'); return; }
   const nickname = env('ADMIN_NICKNAME', 'admin').trim();
   const sid = env('ADMIN_SID', 'admin').trim();
-  console.log('Admin login -> email: ' + email + ' | password length: ' + password.length);
   const row = db.prepare("SELECT * FROM users WHERE role = 'admin' AND email = ?").get(email);
   if (!row) {
     db.prepare("INSERT INTO users(nickname,sid,email,pass_hash,role,verified,created_at) VALUES(?,?,?,?,'admin',1,?)").run(nickname, sid, email, hashPassword(password), Date.now());
-    console.log('Admin account created for ' + email);
   } else {
     if (!checkPassword(password, row.pass_hash)) db.prepare('UPDATE users SET pass_hash = ? WHERE id = ?').run(hashPassword(password), row.id);
     db.prepare('UPDATE users SET nickname = ? WHERE id = ?').run(nickname, row.id);
@@ -686,7 +641,6 @@ setInterval(() => {
 }, 3600000);
 
 server.listen(PORT, () => {
-  console.log(`Work Buddy is running at http://localhost:${PORT}`);
-  console.log(`Admin panel:           http://localhost:${PORT}/admin`);
-  console.log(BOT_URL() ? 'Bot connected.' : 'Demo mode: no BOT_WEBHOOK_URL set, so the bot is simulated.');
+  console.log(`Work Buddy at http://localhost:${PORT}`);
+  console.log(BOT_URL() ? 'Bot connected.' : 'Demo mode.');
 });

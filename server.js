@@ -10,7 +10,6 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 
-/* ------------------------------------------------------------------ settings */
 (function loadEnv() {
   const file = path.join(__dirname, '.env');
   if (!fs.existsSync(file)) return;
@@ -27,8 +26,9 @@ const { DatabaseSync } = require('node:sqlite');
 const env = (k, d = '') => (process.env[k] === undefined || process.env[k] === '' ? d : process.env[k]);
 const PORT = Number(env('PORT', '3000'));
 const DEV_MODE = env('DEV_MODE', 'true') === 'true';
-const COOKIE_SECURE = env('COOKIE_SECURE', 'false') === 'true';
-const TRUST_PROXY = env('TRUST_PROXY', 'false') === 'true';
+const ON_RENDER = !!(process.env.RENDER || process.env.RENDER_SERVICE_ID);
+const COOKIE_SECURE = env('COOKIE_SECURE', ON_RENDER ? 'true' : 'false') === 'true';
+const TRUST_PROXY = env('TRUST_PROXY', ON_RENDER ? 'true' : 'false') === 'true';
 const ENV_BUY_URL = env('BUY_URL');
 const ENV_BOT_URL = env('BOT_WEBHOOK_URL');
 const BOT_KEY = env('BOT_API_KEY');
@@ -40,7 +40,6 @@ const MAIL_FROM = env('MAIL_FROM');
 const DATA_DIR = env('DATA_DIR', path.join(__dirname, 'data'));
 const PUBLIC = path.join(__dirname, 'public');
 
-/* ------------------------------------------------------------------ database */
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const db = new DatabaseSync(path.join(DATA_DIR, 'workbuddy.db'));
 db.exec(`
@@ -116,22 +115,11 @@ db.prepare("UPDATE schedules SET status='failed', result='The server restarted b
 
 function tx(fn) {
   db.exec('BEGIN IMMEDIATE');
-  try {
-    const r = fn();
-    db.exec('COMMIT');
-    return r;
-  } catch (e) {
-    db.exec('ROLLBACK');
-    throw e;
-  }
+  try { const r = fn(); db.exec('COMMIT'); return r; }
+  catch (e) { db.exec('ROLLBACK'); throw e; }
 }
 
-class HttpError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
+class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const bad = (msg, status = 400) => { throw new HttpError(status, msg); };
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -392,7 +380,11 @@ route('POST', '/api/signup', null, async ({ req, body }) => {
   limit('signup|' + clientIp(req), 8, 15 * 60000);
   const v = checkSignup(body);
   db.prepare('DELETE FROM users WHERE verified = 0 AND created_at < ?').run(Date.now() - 24 * 3600000);
-  if (db.prepare('SELECT id FROM users WHERE email = ? OR sid = ?').get(v.email, v.sid)) bad('That email or account ID is already used.');
+  const taken = db.prepare('SELECT email, sid FROM users WHERE email = ? OR sid = ?').get(v.email, v.sid);
+  if (taken) {
+    if (String(taken.email).toLowerCase() === v.email) bad('That email is already registered. Log in instead of signing up again.');
+    bad('That school account ID is already registered. Log in instead of signing up again.');
+  }
   const info = db.prepare('INSERT INTO users(nickname,sid,email,pass_hash,school_pass_enc,created_at) VALUES(?,?,?,?,?,?)').run(v.nickname, v.sid, v.email, hashPassword(v.password), encodeSchoolPassword(v.schoolPassword), Date.now());
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
   const extra = await issueVerification(user);
@@ -471,7 +463,6 @@ route('POST', '/api/redeem', 'user', ({ user, body }) => {
 });
 
 route('GET', '/api/schedules', 'user', ({ user }) => ({ schedules: db.prepare('SELECT id, run_at AS runAt, status, result FROM schedules WHERE user_id = ? ORDER BY run_at DESC LIMIT 10').all(user.id) }));
-
 route('POST', '/api/schedules', 'user', ({ user, body }) => {
   if (user.status !== 'active') bad('Your account is paused. Contact the admin.', 403);
   const runAt = Number(body.runAt);
@@ -485,14 +476,12 @@ route('POST', '/api/schedules', 'user', ({ user, body }) => {
   db.prepare('INSERT INTO schedules(user_id,run_at,tz,created_at) VALUES(?,?,?,?)').run(user.id, runAt, tz, Date.now());
   return { ok: true };
 });
-
 route('DELETE', '/api/schedules/:id', 'user', ({ user, params }) => {
   db.prepare("UPDATE schedules SET status = 'cancelled' WHERE id = ? AND user_id = ? AND status = 'pending'").run(Number(params.id), user.id);
   return { ok: true };
 });
 
 route('GET', '/api/messages', 'user', ({ user }) => ({ messages: db.prepare('SELECT id, type, body, status, reply, created_at AS createdAt FROM messages WHERE user_id = ? ORDER BY id DESC LIMIT 20').all(user.id) }));
-
 route('POST', '/api/messages', 'user', ({ user, body }) => {
   limit('msg|' + user.id, 10, 60 * 60000);
   const type = body.type === 'issue' ? 'issue' : 'request';

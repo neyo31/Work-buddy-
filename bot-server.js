@@ -98,20 +98,16 @@ async function moodleLogin(page, accountId, password) {
   }
 }
 
-/** After login: open My courses and scan for assignments / quizzes / worksheets */
 async function scanWork(page) {
   const found = [];
-
   await page.goto(BASE + '/my/courses.php', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
   await new Promise((r) => setTimeout(r, 1500));
 
-  // Collect course links
   const courses = await page.$$eval('a[href*="/course/view.php"]', (as) =>
     as
       .map((a) => ({ href: a.href, name: (a.textContent || '').trim() }))
       .filter((c) => c.href && c.name && c.name.length > 1)
   );
-  // Unique by href
   const seen = new Set();
   const uniqueCourses = [];
   for (const c of courses) {
@@ -126,7 +122,6 @@ async function scanWork(page) {
     try {
       await page.goto(course.href, { waitUntil: 'domcontentloaded', timeout: 45000 });
       await new Promise((r) => setTimeout(r, 800));
-
       const activities = await page.$$eval(
         'a[href*="/mod/assign/"], a[href*="/mod/quiz/"], a[href*="/mod/lesson/"], a[href*="/mod/hvp/"], a[href*="/mod/questionnaire/"]',
         (as) =>
@@ -142,7 +137,6 @@ async function scanWork(page) {
                   : 'activity',
           }))
       );
-
       for (const act of activities) {
         if (!act.name) continue;
         found.push({ course: course.name, ...act });
@@ -151,7 +145,6 @@ async function scanWork(page) {
       console.log('[bot] course scan error', course.name, e.message);
     }
   }
-
   return { courses: uniqueCourses.length, activities: found };
 }
 
@@ -184,16 +177,16 @@ async function doTheWork(payload) {
     if (scan.activities.length === 0) {
       return {
         success: true,
+        charge: false,
         message:
           scan.courses === 0
-            ? 'Logged in. No courses found on My courses yet.'
+            ? 'Logged in. No courses found on My courses yet. (No token used.)'
             : 'Logged in and checked ' +
               scan.courses +
-              ' course(s). No open assignments/quizzes found right now.',
+              ' course(s). No open assignments/quizzes found right now. (No token used.)',
       };
     }
 
-    // List a few for the user; auto-answering comes next once we map each activity type
     const preview = scan.activities
       .slice(0, 5)
       .map((a) => a.type + ': ' + a.name)
@@ -201,10 +194,11 @@ async function doTheWork(payload) {
 
     return {
       success: true,
+      charge: false,
       message:
         'Logged in. Found ' +
         scan.activities.length +
-        ' task(s) across courses. Next update will open and complete them. Preview: ' +
+        ' task(s) across courses. Next update will open and complete them. (No token used yet.) Preview: ' +
         preview,
       result: { count: scan.activities.length, sample: scan.activities.slice(0, 10) },
     };

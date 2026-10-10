@@ -47,11 +47,20 @@
   }
   async function viewUsers() {
     const { users } = await api('/api/admin/users');
-    const post = (id, what, body) => guarded(async () => { await api(`/api/admin/users/${id}/${what}`, 'POST', body); toast('Saved.'); load(); });
-    const rows = users.map((u) => h('tr', {}, h('td', { text: u.nickname }), h('td', { class: 'mono', text: u.accountId }), h('td', { text: u.email }), h('td', { text: String(u.tokens) }), h('td', {}, badge(u.status === 'active' ? 'Active' : u.status, u.status === 'active' ? 'good' : 'warn')), h('td', { text: when(u.lastLogin) }), h('td', {}, h('div', { class: 'actions' },
-      h('button', { class: 'btn small', type: 'button', text: u.status === 'active' ? 'Pause' : 'Resume', onclick: () => post(u.id, 'status', { status: u.status === 'active' ? 'paused' : 'active' }) }),
-      h('button', { class: 'btn small', type: 'button', text: 'Tokens', onclick: () => { const v = prompt('Add or remove tokens (e.g. 2 or -1)', '2'); if (v !== null && v.trim() !== '') post(u.id, 'tokens', { delta: Number(v) }); } }),
-      h('button', { class: 'btn small', type: 'button', text: 'Reset school edits', onclick: () => guarded(async () => { await api('/api/admin/users/' + u.id + '/school-reset', 'POST', { extraTries: 3 }); toast('School edits restored.'); load(); }) }))));
+    const post = (id, what, body) => guarded(async () => { await api('/api/admin/users/' + id + '/' + what, 'POST', body); toast('Saved.'); load(); });
+    const rows = users.map((u) => h('tr', {},
+      h('td', { text: u.nickname }),
+      h('td', { class: 'mono', text: u.accountId }),
+      h('td', { text: u.email }),
+      h('td', { text: String(u.tokens) }),
+      h('td', {}, badge(u.status === 'active' ? 'Active' : u.status, u.status === 'active' ? 'good' : 'warn')),
+      h('td', { text: when(u.lastLogin) }),
+      h('td', {}, h('div', { class: 'actions' },
+        h('button', { class: 'btn small', type: 'button', text: u.status === 'active' ? 'Pause' : 'Resume', onclick: () => post(u.id, 'status', { status: u.status === 'active' ? 'paused' : 'active' }) }),
+        h('button', { class: 'btn small', type: 'button', text: 'Tokens', onclick: () => { const v = prompt('Add or remove tokens (e.g. 2 or -1)', '2'); if (v !== null && v.trim() !== '') post(u.id, 'tokens', { delta: Number(v) }); } }),
+        h('button', { class: 'btn small', type: 'button', text: 'Reset school edits', onclick: () => guarded(async () => { await api('/api/admin/users/' + u.id + '/school-reset', 'POST', { extraTries: 3 }); toast('School edits restored.'); load(); }) })
+      ))
+    ));
     content.replaceChildren(h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, ['Nickname', 'Account ID', 'Email', 'Tokens', 'Status', 'Last login', 'Actions'].map((t) => h('th', { text: t })))), h('tbody', {}, rows.length ? rows : [h('tr', {}, h('td', { colspan: '7', class: 'muted', text: 'No users.' }))]))));
   }
   async function viewMessages() {

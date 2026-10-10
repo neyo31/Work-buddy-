@@ -59,8 +59,8 @@
   }
   function verifyForm() {
     const v = state.verify; const wrap = h('div', {});
-    wrap.append(h('p', { class: 'tagline', text: `We sent a 6-digit code to ${v.email}.` }));
-    if (v.devCode) wrap.append(h('div', { class: 'msg info', text: `Your verification code is ${v.devCode}. Enter it below.` }));
+    wrap.append(h('p', { class: 'tagline', text: 'We sent a 6-digit code to ' + v.email + '.' }));
+    if (v.devCode) wrap.append(h('div', { class: 'msg info', text: 'Your verification code is ' + v.devCode + '. Enter it below.' }));
     wrap.append(formShell(async (fd) => afterAuthResponse(await api('/api/verify', 'POST', { email: v.email, code: fd.get('code') })), 'Verify and continue', h('div', { class: 'field' }, h('label', { for: 'code', text: 'Verification code' }), h('input', { class: 'input code-input', id: 'code', name: 'code', inputmode: 'numeric', maxlength: '6', required: true }))));
     wrap.append(h('div', { class: 'row' }, h('button', { class: 'btn small', type: 'button', text: 'Back', onclick: () => { state.verify = null; renderAuth(); } })));
     return wrap;
@@ -92,7 +92,7 @@
     home.stage.classList.toggle('working', busy); home.startBtn.disabled = paused || out || busy;
     home.startLabel.replaceChildren(...(busy ? ['Working…'] : paused ? ['Paused'] : out ? ['Out of', h('br'), 'tokens'] : ['Start', h('br'), 'Work Buddy']));
     home.headline.textContent = busy ? 'Work Buddy is on it' : paused ? 'Paused' : out ? 'No tokens left' : 'Ready when you are';
-    home.sub.textContent = out ? 'Buy tokens below.' : `A finished run uses ${cost} ${plural(cost, 'token')}.`;
+    home.sub.textContent = out ? 'Buy tokens below.' : 'A finished run uses ' + cost + ' ' + plural(cost, 'token') + '.';
     const r = state.result; home.resultBox.hidden = !r;
     if (r) { home.resultBox.className = 'result ' + (r.ok ? 'good' : 'fail'); home.resultBox.textContent = r.message; }
   }
@@ -103,7 +103,7 @@
     catch (e) { if (e.status === 401) return signedOut(); state.result = { ok: false, message: e.message }; }
     finally { state.working = false; try { state.me = (await api('/api/me')).user; } catch {} refreshHome(); }
   }
-  async function redeem(payload, done) { try { const r = await api('/api/redeem', 'POST', payload); state.me.tokens = r.tokens; refreshHome(); toast(`${r.added} ${plural(r.added, 'token')} added.`); if (done) done(); } catch (e) { if (e.status === 401) return signedOut(); toast(e.message, true); } }
+  async function redeem(payload, done) { try { const r = await api('/api/redeem', 'POST', payload); state.me.tokens = r.tokens; refreshHome(); toast(r.added + ' ' + plural(r.added, 'token') + ' added.'); if (done) done(); } catch (e) { if (e.status === 401) return signedOut(); toast(e.message, true); } }
   function redeemFile(file) { if (file.size > 2000000) return toast('File too big.', true); const reader = new FileReader(); reader.onload = () => redeem({ pdf: String(reader.result).split(',')[1] || '' }); reader.readAsDataURL(file); }
   function closeLayer() { if (layer) layer.remove(); layer = null; document.removeEventListener('keydown', onEsc); }
   function onEsc(e) { if (e.key === 'Escape') closeLayer(); }
@@ -132,11 +132,11 @@
       try { const r = await api('/api/account/school', 'POST', { accountId: idInput.value, schoolPassword: passInput.value }); state.me = r.user; toast('Saved. ' + r.user.schoolEditLeft + ' edit(s) left.'); closeLayer(); }
       catch (e) { toast(e.message, true); } finally { save.disabled = false; }
     } });
-    sheet('Edit school login', h('section', {}, h('p', { class: 'muted small', text: left > 0 ? ('You can change school ID and password. ' + left + ' edit(s) left.') : 'No edits left. Report an issue for the admin.'), h('div', { class: 'field' }, h('label', { for: 'schoolId', text: 'School account ID' }), idInput), h('div', { class: 'field' }, h('label', { for: 'schoolPass', text: 'School password' }), passInput), h('div', { class: 'row' }, save)));
+    sheet('Edit school login', h('section', {}, h('p', { class: 'muted small', text: left > 0 ? ('You can change school ID and password. ' + left + ' edit(s) left.') : 'No edits left. Report an issue for the admin.' }), h('div', { class: 'field' }, h('label', { for: 'schoolId', text: 'School account ID' }), idInput), h('div', { class: 'field' }, h('label', { for: 'schoolPass', text: 'School password' }), passInput), h('div', { class: 'row' }, save)));
   }
   function openIssue() {
     const list = h('div', { class: 'list' });
-    sheet('Report an issue', h('section', {}, h('p', { class: 'muted small', text: 'Tell us what happened.' }), messageBox('issue', 'What went wrong?', 'Send report', () => {}), list));
+    sheet('Report an issue', h('section', {}, h('p', { class: 'muted small', text: 'Tell us what happened.' }), messageBox('issue', 'What went wrong?', 'Send report'), list));
   }
   function messageBox(type, placeholder, button) {
     const text = h('textarea', { class: 'input', placeholder, maxlength: '1000' });

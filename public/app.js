@@ -3,10 +3,11 @@
 
   const root = document.getElementById('app');
   const state = { me: null, config: { buyUrl: '', costPerRun: 1 }, authTab: 'login', verify: null, working: false, result: null };
-  let layer = null;
-  let home = null;
+  let layer = null; // drawer / sheet layer
+  let home = null; // refs to the home screen pieces
   let pollTimer = null;
 
+  /* ---------------------------------------------------------------- helpers */
   function h(tag, props, ...kids) {
     const el = document.createElement(tag);
     for (const [k, v] of Object.entries(props || {})) {
@@ -70,6 +71,7 @@
     renderAuth();
   }
 
+  /* ---------------------------------------------------------------- sign in / sign up */
   function renderAuth() {
     home = null;
     const card = h('div', { class: 'auth-card' },
@@ -122,25 +124,10 @@
 
   function loginForm() {
     return formShell(
-      async (fd) => {
-        const identifier = fd.get('identifier');
-        const password = fd.get('password');
-        try {
-          afterAuthResponse(await api('/api/login', 'POST', { identifier, password }));
-        } catch (userErr) {
-          try {
-            await api('/api/admin/login', 'POST', { identifier, password });
-            window.location.href = '/admin';
-            return;
-          } catch {
-            throw userErr;
-          }
-        }
-      },
+      async (fd) => afterAuthResponse(await api('/api/login', 'POST', { identifier: fd.get('identifier'), password: fd.get('password') })),
       'Log in',
       field('Email or account ID', 'identifier', { autocomplete: 'username', required: true }),
       field('Password', 'password', { type: 'password', autocomplete: 'current-password', required: true }),
-      h('a', { href: '/admin', class: 'muted small', text: 'Admin panel' }),
     );
   }
 
@@ -193,6 +180,7 @@
     return wrap;
   }
 
+  /* ---------------------------------------------------------------- home */
   function renderHome() {
     const me = state.me;
     const tokenNum = h('strong', { text: '0' });
@@ -204,11 +192,13 @@
     const headline = h('div', { class: 'headline' });
     const sub = h('div', { class: 'muted small' });
     const resultBox = h('div', { class: 'result', hidden: true, role: 'status' });
+
     const buy = h('a', { class: 'btn gold block', target: '_blank', rel: 'noopener', text: 'Buy tokens for Work Buddy' });
     buy.addEventListener('click', (e) => {
       if (!state.config.buyUrl) { e.preventDefault(); toast('The buy link is not set up yet.', true); }
     });
     buy.href = state.config.buyUrl || '#';
+
     const fileInput = h('input', { type: 'file', accept: 'application/pdf,.pdf', hidden: true });
     const drop = h('div', { class: 'drop', tabindex: '0', role: 'button', 'aria-label': 'Drop your voucher PDF here or choose a file' },
       h('strong', { text: 'Drop your voucher PDF here' }), h('span', { class: 'small', text: 'or tap to choose the file' }));
@@ -219,13 +209,16 @@
     drop.addEventListener('dragleave', () => drop.classList.remove('over'));
     drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files[0]) redeemFile(e.dataTransfer.files[0]); });
     fileInput.addEventListener('change', () => { if (fileInput.files[0]) redeemFile(fileInput.files[0]); fileInput.value = ''; });
+
     const codeInput = h('input', { class: 'input', placeholder: 'Or type the code (WB-XXXX-...)', autocomplete: 'off', 'aria-label': 'Voucher code' });
     const codeBtn = h('button', { class: 'btn', type: 'button', text: 'Redeem', onclick: () => { if (codeInput.value.trim()) redeem({ code: codeInput.value }, () => (codeInput.value = '')); } });
+
     const topbar = h('header', { class: 'topbar' },
       h('button', { class: 'menu-btn', type: 'button', 'aria-label': 'Open menu', onclick: openDrawer }, h('span'), h('span'), h('span')),
       h('div', { class: 'title', text: 'Work Buddy' }),
       h('div', { class: 'token-pill', 'aria-live': 'polite' }, tokenNum, tokenLabel),
     );
+
     const main = h('main', { class: 'main' },
       stage,
       h('div', { class: 'status' }, headline, sub),
@@ -237,6 +230,7 @@
         drop, fileInput,
         h('div', { class: 'row' }, codeInput, codeBtn)),
     );
+
     home = { tokenNum, tokenLabel, startBtn, startLabel, stage, headline, sub, resultBox, me };
     root.replaceChildren(topbar, main);
     refreshHome();
@@ -318,6 +312,7 @@
     reader.readAsDataURL(file);
   }
 
+  /* ---------------------------------------------------------------- drawer + sheets */
   function closeLayer() {
     if (layer) layer.remove();
     layer = null;
@@ -356,7 +351,7 @@
     const el = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
       h('div', { class: 'sheet-head' }, h('h2', { text: title }), h('button', { class: 'close', type: 'button', 'aria-label': 'Close', text: '×', onclick: closeLayer })),
       ...sections);
-    mountLayer(h('div', { class: 'scrim', onclick: closeLayer }), el);
+    mountLayer(h('div', { class: 'scrim', style: null, onclick: closeLayer }), el);
     return el;
   }
 
@@ -402,6 +397,7 @@
     sheet('Report an issue',
       h('section', {},
         h('p', { class: 'muted small', text: 'Something not working? Tell us what happened.' }),
+        h('div', { style: null }),
         messageBox('issue', 'What went wrong?', 'Send report', () => fillMessages(list, 'issue')),
         list));
     fillMessages(list, 'issue');
@@ -413,8 +409,11 @@
   }
 
   function openSchedule() {
+    const me = state.me;
     const when1 = h('input', { class: 'input', type: 'datetime-local', id: 'when', min: localInput(new Date(Date.now() + 60000)), 'aria-label': 'Date and time' });
     const schedList = h('div', { class: 'list' });
+    const reqList = h('div', { class: 'list' });
+
     async function loadSchedules() {
       try {
         const { schedules } = await api('/api/schedules');
@@ -430,6 +429,7 @@
               : null)));
       } catch { /* ignore */ }
     }
+
     const go = h('button', {
       class: 'btn primary', type: 'button', text: 'Schedule it',
       onclick: async () => {
@@ -443,25 +443,34 @@
         } catch (e) { toast(e.message, true); } finally { go.disabled = false; }
       },
     });
+
     sheet('Schedule bot',
       h('section', {},
         h('h3', { text: 'Pick a time' }),
-        h('p', { class: 'muted small', text: 'Weekdays only after 1:30 PM your time. Weekends any time.' }),
-        when1,
+        h('p', { class: 'muted small', text: me.anytime
+          ? 'The admin approved you to schedule at any time.'
+          : 'Weekends: any time. Monday to Friday: after 1:30 PM your local time.' }),
+        h('div', { class: 'row' }, when1),
         h('div', { class: 'row' }, go),
-        schedList));
+        schedList),
+      h('section', {},
+        h('h3', { text: 'Request admin' }),
+        h('p', { class: 'muted small', text: 'Need a time that is not allowed? Explain why and the admin can approve you.' }),
+        messageBox('request', 'Tell the admin what you need', 'Send request', () => fillMessages(reqList, 'request')),
+        reqList));
     loadSchedules();
+    fillMessages(reqList, 'request');
   }
 
-  async function boot() {
-    try { state.config = await api('/api/config'); } catch { /* keep defaults */ }
+  /* ---------------------------------------------------------------- start */
+  async function init() {
+    try { state.config = { ...state.config, ...(await api('/api/config')) }; } catch { /* use defaults */ }
     try {
-      const r = await api('/api/me');
-      state.me = r.user;
+      state.me = (await api('/api/me')).user;
       renderHome();
     } catch {
       renderAuth();
     }
   }
-  boot();
+  init();
 })();

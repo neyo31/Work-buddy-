@@ -2,7 +2,7 @@
   'use strict';
 
   const root = document.getElementById('app');
-  const TABS = [['overview', 'Overview'], ['users', 'Users'], ['messages', 'Requests and reports'], ['codes', 'Vouchers']];
+  const TABS = [['overview', 'Overview'], ['users', 'Users'], ['messages', 'Requests and reports'], ['codes', 'Vouchers'], ['settings', 'Settings']];
   let tab = 'overview';
   let content = null;
   let newCodes = null;
@@ -104,6 +104,7 @@
       if (tab === 'users') await viewUsers();
       if (tab === 'messages') await viewMessages();
       if (tab === 'codes') await viewCodes();
+      if (tab === 'settings') await viewSettings();
     });
   }
 
@@ -219,6 +220,30 @@
           h('td', {}, c.usedAt ? badge(`Used by ${c.usedBy || 'a user'}`, '') : badge('Unused', 'good')),
           h('td', {}, c.usedAt ? null : pdfLink([c.code], 'PDF'))))
           : [h('tr', {}, h('td', { colspan: '5', class: 'muted', text: 'No vouchers yet.' }))]))));
+  }
+
+  /* ------------------------------------------------------------- settings */
+  async function viewSettings() {
+    const s = await api('/api/admin/settings');
+    const buyUrl = h('input', { class: 'input', id: 'buyUrl', value: s.buyUrl || '', placeholder: 'https://...' });
+    const botUrl = h('input', { class: 'input', id: 'botUrl', value: s.botUrl || '', placeholder: 'https://your-bot.onrender.com/run-bot' });
+    const save = h('button', {
+      class: 'btn primary', type: 'button', text: 'Save settings',
+      onclick: () => guarded(async () => {
+        await api('/api/admin/settings', 'POST', { buyUrl: buyUrl.value, botUrl: botUrl.value });
+        toast('Saved.');
+      }),
+    });
+    content.replaceChildren(
+      h('div', { class: 'card' },
+        h('h2', { text: 'Buy tokens link' }),
+        h('p', { class: 'sub', text: 'Where the gold "buy tokens" button sends users.' }),
+        h('div', { class: 'field' }, h('label', { for: 'buyUrl', text: 'Buy tokens URL' }), buyUrl)),
+      h('div', { class: 'card' },
+        h('h2', { text: 'Bot connection' }),
+        h('p', { class: 'sub', text: 'The address of your bot service that runs the task.' }),
+        h('div', { class: 'field' }, h('label', { for: 'botUrl', text: 'Bot URL' }), botUrl)),
+      save);
   }
 
   /* ------------------------------------------------------------- start */

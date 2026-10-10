@@ -1,17 +1,16 @@
 'use strict';
 /*
   Work Buddy bot service.
-  Deploy this as a SEPARATE Render web service (not the website).
+  Deploy as a SEPARATE Render web service.
   Start command: node bot-server.js
 
-  Website Settings -> Bot URL should be:
-    https://YOUR-BOT-SERVICE.onrender.com/run-bot
+  Website Admin -> Settings -> Bot URL:
+    https://YOUR-BOT.onrender.com/run-bot
 
-  Optional env on the bot service:
-    BOT_API_KEY     - same value as on the website (Authorization: Bearer ...)
-    SCHOOL_URL      - school login page URL
-    GEMINI_API_KEY  - if you use Gemini later
-    PORT            - set automatically by Render
+  Bot service env:
+    SCHOOL_URL   = school login page
+    BOT_API_KEY  = optional, same as website
+    SID_SELECTOR / PASS_SELECTOR / LOGIN_BTN_SELECTOR = optional CSS selectors
 */
 const http = require('node:http');
 const { URL } = require('node:url');
@@ -46,12 +45,11 @@ function readJson(req) {
 }
 
 function send(res, status, obj) {
-  const body = JSON.stringify(obj);
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
   });
-  res.end(body);
+  res.end(JSON.stringify(obj));
 }
 
 function checkAuth(req) {
@@ -60,14 +58,18 @@ function checkAuth(req) {
   return h === 'Bearer ' + BOT_KEY;
 }
 
-/**
- * Do the real school work here.
- * payload.user.accountId  = school SID / account ID
- * payload.user.schoolPassword = school password
- * payload.trigger = 'manual' | 'scheduled'
- *
- * Return { success: true/false, message: '...' }
- */
+async function launchBrowser() {
+  const puppeteer = require('puppeteer-core');
+  const chromium = require('@sparticuz/chromium');
+  return puppeteer.launch({
+    args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+    defaultViewport: chromium.defaultViewport,
+    executablePath: await chromium.executablePath(),
+    headless: true,
+    ignoreHTTPSErrors: true,
+  });
+}
+
 async function doTheWork(payload) {
   const user = payload.user || {};
   const accountId = user.accountId || payload.account || '';
@@ -85,64 +87,42 @@ async function doTheWork(payload) {
     schoolUrl: SCHOOL_URL || '(not set)',
   });
 
-  // If SCHOOL_URL is not set, still prove the website <-> bot link works.
   if (!SCHOOL_URL) {
-    await new Promise((r) => setTimeout(r, 1500));
+    await new Promise((r) => setTimeout(r, 1200));
     return {
       success: true,
-      message:
-        'Bot is connected. Set SCHOOL_URL on the bot service to run the real school login next.',
+      message: 'Bot is connected. Set SCHOOL_URL on the bot service to run the real school login next.',
     };
   }
 
-  // Real automation needs Puppeteer + correct selectors for your school site.
-  // Install on the bot service: npm install puppeteer
-  // Then replace this block with your login / worksheet flow.
+  let browser;
   try {
-    let puppeteer;
-    try {
-      puppeteer = require('puppeteer');
-    } catch {
-      return {
-        success: false,
-        message:
-          'Puppeteer is not installed on the bot service. Run npm install puppeteer there, or clear SCHOOL_URL for connection-only mode.',
-      };
-    }
+    browser = await launchBrowser();
+    const page = await browser.newPage();
+    await page.goto(SCHOOL_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-    });
-    try {
-      const page = await browser.newPage();
-      await page.goto(SCHOOL_URL, { waitUntil: 'networkidle2', timeout: 60000 });
+    const sidSel = process.env.SID_SELECTOR || 'input[name="sid"], #sid, input[type="text"]';
+    const passSel = process.env.PASS_SELECTOR || 'input[name="password"], #password, input[type="password"]';
+    const btnSel = process.env.LOGIN_BTN_SELECTOR || 'button[type="submit"], input[type="submit"]';
 
-      // TODO: replace these selectors with your real school site selectors
-      const sidSel = process.env.SID_SELECTOR || 'input[name="sid"], #sid, input[type="text"]';
-      const passSel = process.env.PASS_SELECTOR || 'input[name="password"], #password, input[type="password"]';
-      const btnSel = process.env.LOGIN_BTN_SELECTOR || 'button[type="submit"], input[type="submit"]';
+    await page.waitForSelector(sidSel, { timeout: 25000 });
+    await page.type(sidSel, accountId, { delay: 15 });
+    await page.type(passSel, password, { delay: 15 });
+    await Promise.all([
+      page.click(btnSel),
+      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {}),
+    ]);
 
-      await page.waitForSelector(sidSel, { timeout: 20000 });
-      await page.type(sidSel, accountId, { delay: 20 });
-      await page.type(passSel, password, { delay: 20 });
-      await Promise.all([
-        page.click(btnSel),
-        page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 }).catch(() => {}),
-      ]);
-
-      // Placeholder: after login, your navigate / answer / submit modules go here.
-      console.log('[bot] login step finished for', accountId);
-      return {
-        success: true,
-        message: 'Bot logged in. Add worksheet steps in bot-server.js to finish the full run.',
-      };
-    } finally {
-      await browser.close().catch(() => {});
-    }
+    console.log('[bot] login step finished for', accountId);
+    return {
+      success: true,
+      message: 'Bot logged in. Worksheet steps can be added next.',
+    };
   } catch (e) {
     console.error('[bot] error', e);
     return { success: false, message: e.message || 'Bot failed while running.' };
+  } finally {
+    if (browser) await browser.close().catch(() => {});
   }
 }
 
@@ -153,7 +133,6 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok: true, service: 'work-buddy-bot' });
   }
 
-  // Website posts here (see server.js callBot)
   if (req.method === 'POST' && (url.pathname === '/run-bot' || url.pathname === '/' || url.pathname === '/start')) {
     if (!checkAuth(req)) return send(res, 401, { success: false, message: 'Unauthorized bot key.' });
     try {
@@ -171,7 +150,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`Work Buddy bot listening on port ${PORT}`);
-  console.log(`POST /run-bot  (website should use this URL)`);
-  if (!BOT_KEY) console.log('BOT_API_KEY not set — accepting all requests (ok for first test)');
+  console.log('POST /run-bot');
+  if (!BOT_KEY) console.log('BOT_API_KEY not set — accepting all requests');
   if (!SCHOOL_URL) console.log('SCHOOL_URL not set — connection test mode only');
 });

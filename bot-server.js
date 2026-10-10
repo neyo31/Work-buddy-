@@ -411,7 +411,9 @@ async function doTheWork(payload) {
 
   let browser;
   try {
+    console.log('[bot] launching browser…');
     browser = await launchBrowser();
+    console.log('[bot] browser ready');
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     page.setDefaultTimeout(45000);
@@ -460,15 +462,22 @@ async function doTheWork(payload) {
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', 'http://localhost');
+  console.log('[bot] request', req.method, url.pathname);
   if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/health')) {
     return send(res, 200, { ok: true, service: 'work-buddy-bot', gemini: !!GEMINI_KEY });
   }
   if (req.method === 'POST' && (url.pathname === '/run-bot' || url.pathname === '/' || url.pathname === '/start')) {
-    if (!checkAuth(req)) return send(res, 401, { success: false, message: 'Unauthorized bot key.' });
+    if (!checkAuth(req)) {
+      console.log('[bot] unauthorized');
+      return send(res, 401, { success: false, message: 'Unauthorized bot key.' });
+    }
     try {
-      return send(res, 200, await doTheWork(await readJson(req)));
+      console.log('[bot] run starting…');
+      const result = await doTheWork(await readJson(req));
+      console.log('[bot] run finished', result.success, result.message);
+      return send(res, 200, result);
     } catch (e) {
-      console.error(e);
+      console.error('[bot] run crash', e);
       return send(res, 500, { success: false, charge: false, message: e.message || 'Server error' });
     }
   }

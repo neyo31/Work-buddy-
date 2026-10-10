@@ -460,27 +460,64 @@ async function doTheWork(payload) {
   }
 }
 
+const jobs = new Map();
+function newJobId() {
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', 'http://localhost');
   console.log('[bot] request', req.method, url.pathname);
+
   if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/health')) {
     return send(res, 200, { ok: true, service: 'work-buddy-bot', gemini: !!GEMINI_KEY });
   }
+
+  const jobMatch = url.pathname.match(/^\/job\/([^/]+)$/);
+  if (req.method === 'GET' && jobMatch) {
+    const job = jobs.get(jobMatch[1]);
+    if (!job) return send(res, 404, { status: 'missing', message: 'Job not found.' });
+    if (job.status === 'done' || job.status === 'error') {
+      return send(res, 200, { status: job.status, ...job.result });
+    }
+    return send(res, 200, { status: 'running', message: 'Still working…' });
+  }
+
   if (req.method === 'POST' && (url.pathname === '/run-bot' || url.pathname === '/' || url.pathname === '/start')) {
     if (!checkAuth(req)) {
       console.log('[bot] unauthorized');
       return send(res, 401, { success: false, message: 'Unauthorized bot key.' });
     }
-    try {
-      console.log('[bot] run starting…');
-      const result = await doTheWork(await readJson(req));
-      console.log('[bot] run finished', result.success, result.message);
-      return send(res, 200, result);
-    } catch (e) {
-      console.error('[bot] run crash', e);
-      return send(res, 500, { success: false, charge: false, message: e.message || 'Server error' });
+    let payload = {};
+    try { payload = await readJson(req); } catch (e) {
+      return send(res, 400, { success: false, message: 'Bad JSON body.' });
     }
+    const id = newJobId();
+    jobs.set(id, { status: 'running', result: null, created: Date.now() });
+    for (const [k, v] of jobs) {
+      if (Date.now() - v.created > 3600000) jobs.delete(k);
+    }
+    console.log('[bot] job accepted', id);
+    send(res, 202, { accepted: true, jobId: id });
+
+    (async () => {
+      try {
+        console.log('[bot] run starting…', id);
+        const result = await doTheWork(payload);
+        console.log('[bot] run finished', id, result.success, result.message);
+        jobs.set(id, { status: 'done', result, created: Date.now() });
+      } catch (e) {
+        console.error('[bot] run crash', id, e);
+        jobs.set(id, {
+          status: 'error',
+          result: { success: false, charge: false, message: e.message || 'Server error' },
+          created: Date.now(),
+        });
+      }
+    })();
+    return;
   }
+
   send(res, 404, { error: 'Not found' });
 });
 

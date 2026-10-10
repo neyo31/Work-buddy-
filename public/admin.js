@@ -113,7 +113,7 @@
     const o = await api('/api/admin/overview');
     const stat = (n, label) => h('div', { class: 'stat' }, h('strong', { text: String(n) }), h('span', { text: label }));
     content.replaceChildren(
-      o.demo ? h('div', { class: 'msg info', text: 'Demo mode: no bot is connected yet. Set BOT_WEBHOOK_URL in your .env file to connect it.' }) : null,
+      o.demo ? h('div', { class: 'msg info', text: 'Demo mode: no bot is connected. Open the Settings tab and paste your Bot URL, then Save.' }) : null,
       h('div', { class: 'stats' }, stat(o.users, 'Users'), stat(o.active, 'Active users'), stat(o.openMessages, 'Open messages'), stat(o.unusedCodes, 'Unused vouchers')),
       h('h2', { text: 'Recent runs' }),
       h('div', { class: 'table-wrap' }, h('table', {},
@@ -241,7 +241,7 @@
         h('div', { class: 'field' }, h('label', { for: 'buyUrl', text: 'Buy tokens URL' }), buyUrl)),
       h('div', { class: 'card' },
         h('h2', { text: 'Bot connection' }),
-        h('p', { class: 'sub', text: 'The address of your bot service that runs the task.' }),
+        h('p', { class: 'sub', text: 'Paste the full URL of your bot service (the place that receives the Start button).' }),
         h('div', { class: 'field' }, h('label', { for: 'botUrl', text: 'Bot URL' }), botUrl)),
       save);
   }

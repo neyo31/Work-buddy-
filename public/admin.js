@@ -75,9 +75,27 @@
   }
   async function viewSettings() {
     const s = await api('/api/admin/settings');
-    const buyUrl = h('input', { class: 'input', value: s.buyUrl || '' });
+    const connected = !!(s.botUrl && String(s.botUrl).trim());
+    const status = h('div', { class: 'msg ' + (connected ? 'info' : 'error'), text: connected ? ('Bot connected: ' + s.botUrl) : 'Demo mode — Bot URL is empty. Paste the bot URL below and Save.' });
+    const buyUrl = h('input', { class: 'input', value: s.buyUrl || '', placeholder: 'https://...' });
     const botUrl = h('input', { class: 'input', value: s.botUrl || '', placeholder: 'https://work-buddy-2.onrender.com/run-bot' });
-    content.replaceChildren(h('div', { class: 'card' }, h('h2', { text: 'Buy URL' }), buyUrl), h('div', { class: 'card' }, h('h2', { text: 'Bot URL' }), botUrl), h('button', { class: 'btn primary', type: 'button', text: 'Save', onclick: () => guarded(async () => { await api('/api/admin/settings', 'POST', { buyUrl: buyUrl.value, botUrl: botUrl.value }); toast('Saved.'); }) }));
+    const btn = h('button', { class: 'btn primary', type: 'button', text: 'Save settings' });
+    const note = h('p', { class: 'muted small', text: 'After Save you should see “Bot connected” above. If it goes back to Demo after a redeploy, also set BOT_WEBHOOK_URL on the website service in Render.' });
+    btn.onclick = () => guarded(async () => {
+      btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        const r = await api('/api/admin/settings', 'POST', { buyUrl: buyUrl.value.trim(), botUrl: botUrl.value.trim() });
+        buyUrl.value = r.buyUrl || '';
+        botUrl.value = r.botUrl || '';
+        const ok = !!(r.botUrl && String(r.botUrl).trim());
+        status.className = 'msg ' + (ok ? 'info' : 'error');
+        status.textContent = ok ? ('Saved. Bot connected: ' + r.botUrl) : 'Saved, but Bot URL is still empty.';
+        toast(ok ? 'Settings saved — bot connected.' : 'Saved, but Bot URL is empty.', !ok);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Save settings';
+      }
+    });
+    content.replaceChildren(status, h('div', { class: 'card' }, h('h2', { text: 'Buy URL' }), buyUrl), h('div', { class: 'card' }, h('h2', { text: 'Bot URL' }), botUrl, note), btn);
   }
   (async () => { try { await api('/api/admin/check'); showPanel(); } catch { showLogin(); } })();
 })();

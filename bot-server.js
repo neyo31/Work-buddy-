@@ -359,10 +359,21 @@ async function findQuizzes(page) {
     try {
       await page.goto(c.href, { waitUntil: 'domcontentloaded', timeout: 45000 });
       await sleep(700);
-      const found = await page.$$eval(
+      const found = await page.$eval(
         'a[href*="/mod/quiz/view.php"]',
         (as, courseName) =>
-          as.map((a) => ({ href: a.href, name: (a.textContent || '').trim(), course: courseName })).filter((x) => x.name),
+          as.map((a) => {
+            const clean = (v) => String(v || '').replace(/\\s+/g, ' ').trim();
+            const parent = a.closest('.activity, .activity-item, .modtype_quiz, li, tr, .course-section') || a.parentElement;
+            return {
+              href: a.href,
+              name: clean(a.innerText || a.textContent) || clean(a.getAttribute('aria-label')) || clean(a.getAttribute('title')),
+              title: clean(a.getAttribute('title')),
+              ariaLabel: clean(a.getAttribute('aria-label')),
+              context: clean(parent && parent.innerText).slice(0, 500),
+              course: courseName
+            };
+          }).filter((x) => x.name || x.title || x.ariaLabel || x.context),
         c.name
       );
       for (const q of found) quizzes.push(q);
@@ -396,21 +407,39 @@ async function doTheWork(payload) {
     // Inspection mode is deliberately read-only: never open an attempt,
     // answer questions, navigate an attempt, or submit anything.
     if (payload.mode === 'inspect') {
-      const target = String(payload.targetWork || 'Afan Oromo test 1').trim().toLowerCase();
-      const matches = quizzes.filter((q) =>
-        (q.name + ' ' + q.course).toLowerCase().includes(target)
-      );
+      const targetRaw = String(payload.targetWork || 'Afan Oromo test 1').trim();
+      const normalize = (v) => String(v || '').normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\\s+/g, ' ');
+      const target = normalize(targetRaw);
+      const targetTokens = target.split(' ').filter(Boolean);
+      const scored = quizzes.map((q) => {
+        const searchable = normalize([q.name, q.title, q.ariaLabel, q.context, q.course].join(' '));
+        const tokens = new Set(searchable.split(' ').filter(Boolean));
+        const tokenScore = targetTokens.length ? targetTokens.filter((t) => tokens.has(t)).length / targetTokens.length : 0;
+        const exact = searchable.includes(target);
+        const allTokens = targetTokens.length > 0 && targetTokens.every((t) => tokens.has(t));
+        return { q, searchable, score: exact ? 1 : tokenScore, matched: exact || allTokens };
+      });
+      const matches = scored.filter((x) => x.matched).map((x) => x.q);
+      const candidates = [...scored].sort((a, b) => b.score - a.score).slice(0, 8);
       return {
         success: true,
         charge: false,
         mode: 'inspect',
-        targetWork: target,
+        targetWork: targetRaw,
         message: matches.length
-          ? 'Found the requested work: ' + matches.map((q) => q.name + ' (' + q.course + ')').join(', ') + '. Inspection only: no attempt was started and no answers were changed or submitted.'
+          ? 'Found likely matching work: ' + matches.map((q) => (q.name || q.title || q.ariaLabel || 'Untitled quiz') + ' (' + q.course + ')').join(', ') + '. Inspection only: no attempt was started and no answers were changed or submitted.'
           : quizzes.length
-            ? 'No work found — please report this to an admin. The requested work was not found among ' + quizzes.length + ' quiz link(s). No attempt was started.'
+            ? 'No exact or all-word match for "' + targetRaw + '" among ' + quizzes.length + ' quiz link(s). Showing the closest worksheet titles for diagnosis. No attempt was started.'
             : 'No work found — please report this to an admin. No quiz links were found. No attempt was started.',
-        result: (matches.length ? matches : quizzes).map((q) => ({ name: q.name, course: q.course, requestedMatch: matches.includes(q) })),
+        result: (matches.length ? scored.filter((x) => x.matched) : candidates).map((x) => ({
+          name: x.q.name,
+          title: x.q.title,
+          ariaLabel: x.q.ariaLabel,
+          context: x.q.context,
+          course: x.q.course,
+          matchScore: Math.round(x.score * 100),
+          requestedMatch: x.matched
+        })),
       };
     }
 

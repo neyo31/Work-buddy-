@@ -396,14 +396,21 @@ async function doTheWork(payload) {
     // Inspection mode is deliberately read-only: never open an attempt,
     // answer questions, navigate an attempt, or submit anything.
     if (payload.mode === 'inspect') {
+      const target = String(payload.targetWork || 'Afan Oromo test 1').trim().toLowerCase();
+      const matches = quizzes.filter((q) =>
+        (q.name + ' ' + q.course).toLowerCase().includes(target)
+      );
       return {
         success: true,
         charge: false,
         mode: 'inspect',
-        message: quizzes.length
-          ? 'School login succeeded. Found ' + quizzes.length + ' available quiz link(s). No attempt was started and no answers were changed or submitted.'
-          : 'School login succeeded. No quiz links were found. No attempt was started and no answers were changed or submitted.',
-        result: quizzes.map((q) => ({ name: q.name, course: q.course })),
+        targetWork: target,
+        message: matches.length
+          ? 'Found the requested work: ' + matches.map((q) => q.name + ' (' + q.course + ')').join(', ') + '. Inspection only: no attempt was started and no answers were changed or submitted.'
+          : quizzes.length
+            ? 'No work found — please report this to an admin. The requested work was not found among ' + quizzes.length + ' quiz link(s). No attempt was started.'
+            : 'No work found — please report this to an admin. No quiz links were found. No attempt was started.',
+        result: (matches.length ? matches : quizzes).map((q) => ({ name: q.name, course: q.course, requestedMatch: matches.includes(q) })),
       };
     }
 

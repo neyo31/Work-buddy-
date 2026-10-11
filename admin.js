@@ -2,7 +2,7 @@
   'use strict';
 
   const root = document.getElementById('app');
-  const TABS = [['overview', 'Overview'], ['users', 'Users'], ['messages', 'Requests and reports'], ['codes', 'Vouchers']];
+  const TABS = [['overview', 'Overview'], ['users', 'Users'], ['messages', 'Requests and reports'], ['codes', 'Vouchers'], ['settings', 'Settings']];
   let tab = 'overview';
   let content = null;
   let newCodes = null;
@@ -59,7 +59,6 @@
     }
   }
 
-  /* ------------------------------------------------------------- login */
   function showLogin() {
     const err = h('div', { class: 'msg error', hidden: true, role: 'alert' });
     const btn = h('button', { class: 'btn primary block', type: 'submit', text: 'Log in' });
@@ -82,7 +81,6 @@
       h('p', { class: 'tagline', text: 'Work Buddy control panel. Admins only.' }), form)));
   }
 
-  /* ------------------------------------------------------------- shell */
   function showPanel() {
     content = h('div', {});
     const tabs = h('div', { class: 'admin-tabs', role: 'tablist' }, TABS.map(([id, label]) =>
@@ -101,13 +99,13 @@
   function load() {
     guarded(async () => {
       if (tab === 'overview') await viewOverview();
-      if (tab === 'users') await viewUsers();
-      if (tab === 'messages') await viewMessages();
-      if (tab === 'codes') await viewCodes();
+      else if (tab === 'users') await viewUsers();
+      else if (tab === 'messages') await viewMessages();
+      else if (tab === 'codes') await viewCodes();
+      else if (tab === 'settings') await loadSettings();
     });
   }
 
-  /* ------------------------------------------------------------- overview */
   async function viewOverview() {
     const o = await api('/api/admin/overview');
     const stat = (n, label) => h('div', { class: 'stat' }, h('strong', { text: String(n) }), h('span', { text: label }));
@@ -123,7 +121,6 @@
           : [h('tr', {}, h('td', { colspan: '4', class: 'muted', text: 'No runs yet.' }))]))));
   }
 
-  /* ------------------------------------------------------------- users */
   async function viewUsers() {
     const { users } = await api('/api/admin/users');
     const post = (id, what, body) => guarded(async () => { await api(`/api/admin/users/${id}/${what}`, 'POST', body); toast('Saved.'); load(); });
@@ -152,10 +149,9 @@
     content.replaceChildren(
       h('div', { class: 'table-wrap' }, h('table', {},
         h('thead', {}, h('tr', {}, ['Nickname', 'Account ID', 'Email', 'Tokens', 'Status', 'Last login', 'Actions'].map((t) => h('th', { text: t })))),
-        h('tbody', {}, rows.length ? rows : [h('tr', {}, h('td', { colspan: '7', class: 'muted', text: 'No users yet.' }))]))));
+        h('tbody', {}, rows.length ? rows : [h('tr', {}, h('td', { colspan: '7', class: 'muted', text: 'No users yet.' }))])));
   }
 
-  /* ------------------------------------------------------------- messages */
   async function viewMessages() {
     const { messages } = await api('/api/admin/messages');
     const act = (m, action) => {
@@ -179,7 +175,6 @@
           : null)) : [h('p', { class: 'muted', text: 'No messages yet.' })]));
   }
 
-  /* ------------------------------------------------------------- vouchers */
   async function viewCodes() {
     const { codes } = await api('/api/admin/codes');
     const count = h('input', { class: 'input', id: 'count', type: 'number', min: '1', max: '200', value: '1' });
@@ -193,7 +188,6 @@
       }),
     });
     const pdfLink = (list, text) => h('a', { class: 'btn small', href: '/api/admin/codes/pdf?codes=' + encodeURIComponent(list.join(',')), text });
-
     const fresh = newCodes
       ? h('div', { class: 'card newcodes' },
           h('h2', { text: `${newCodes.codes.length} new ${newCodes.codes.length === 1 ? 'voucher' : 'vouchers'} (${newCodes.tokens} tokens each)` }),
@@ -203,7 +197,6 @@
             h('button', { class: 'btn small', type: 'button', text: 'Copy codes', onclick: async () => { try { await navigator.clipboard.writeText(newCodes.codes.join('\n')); toast('Copied.'); } catch { toast('Could not copy. Select the codes below instead.', true); } } })),
           h('p', { class: 'mono', text: newCodes.codes.slice(0, 20).join('   ') + (newCodes.codes.length > 20 ? '   ...' : '') }))
       : null;
-
     content.replaceChildren(
       h('div', { class: 'gen' },
         h('div', { class: 'field' }, h('label', { for: 'count', text: 'How many' }), count),
@@ -218,10 +211,46 @@
           h('td', { text: when(c.createdAt) }),
           h('td', {}, c.usedAt ? badge(`Used by ${c.usedBy || 'a user'}`, '') : badge('Unused', 'good')),
           h('td', {}, c.usedAt ? null : pdfLink([c.code], 'PDF'))))
-          : [h('tr', {}, h('td', { colspan: '5', class: 'muted', text: 'No vouchers yet.' }))]))));
+          : [h('tr', {}, h('td', { colspan: '5', class: 'muted', text: 'No vouchers yet.' }))])));
   }
 
-  /* ------------------------------------------------------------- start */
+  async function loadSettings() {
+    const cfg = await api('/api/admin/settings');
+    const botUrl = h('input', { class: 'input', type: 'url', value: cfg.botUrl || '', placeholder: 'https://your-bot.onrender.com/' });
+    const buyUrl = h('input', { class: 'input', type: 'url', value: cfg.buyUrl || '', placeholder: 'https://…' });
+    const auto = h('input', { type: 'checkbox' });
+    auto.checked = !!cfg.autoWork;
+    const status = h('span', { class: 'muted small', text: cfg.autoWork ? 'Auto-work is ON' : 'Auto-work is OFF (scan only)' });
+    const save = h('button', {
+      class: 'btn primary', type: 'button', text: 'Save settings',
+      onclick: () => guarded(async () => {
+        const r = await api('/api/admin/settings', 'POST', {
+          botUrl: botUrl.value.trim(),
+          buyUrl: buyUrl.value.trim(),
+          autoWork: !!auto.checked
+        });
+        auto.checked = !!r.autoWork;
+        status.textContent = r.autoWork ? 'Auto-work is ON' : 'Auto-work is OFF (scan only)';
+        toast('Settings saved.');
+      })
+    });
+    content.replaceChildren(
+      h('div', { class: 'card' },
+        h('h2', { text: 'Bot connection' }),
+        h('p', { class: 'sub', text: 'Bot webhook URL for Work Buddy (Render bot service).' }),
+        h('div', { class: 'field' }, h('label', { text: 'Bot URL' }), botUrl),
+        h('div', { class: 'field' }, h('label', { text: 'Buy tokens URL' }), buyUrl)),
+      h('div', { class: 'card' },
+        h('h2', { text: 'Auto-work (admin controlled)' }),
+        h('p', { class: 'sub', text: 'When ON, Start Work Buddy logs in, finds open work, fills answers with Gemini, and finishes attempts. When OFF, it only scans. You are responsible for this setting.' }),
+        h('label', { class: 'row', style: 'gap:10px;align-items:center;display:flex' },
+          auto,
+          h('span', { text: 'Enable auto-work (answer + finish)' })),
+        status,
+        h('div', { class: 'actions', style: 'margin-top:12px' }, save))
+    );
+  }
+
   (async () => {
     try { await api('/api/admin/check'); showPanel(); } catch { showLogin(); }
   })();

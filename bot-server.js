@@ -476,6 +476,8 @@ async function doTheWork(payload) {
 }
 
 const jobs = new Map();
+// A single active job prevents simultaneous browser sessions and overlapping tasks.
+let activeJobId = null;
 function newJobId() {
   return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 }
@@ -507,7 +509,23 @@ const server = http.createServer(async (req, res) => {
     try { payload = await readJson(req); } catch (e) {
       return send(res, 400, { success: false, message: 'Bad JSON body.' });
     }
+    // Keep production behavior read-only until a safe practice-environment test is authorized.
+    if (payload.mode !== 'inspect') {
+      return send(res, 409, {
+        success: false,
+        charge: false,
+        message: 'Only read-only inspection is enabled. No attempt will be started, answered, or submitted.'
+      });
+    }
+    if (activeJobId) {
+      return send(res, 409, {
+        success: false,
+        charge: false,
+        message: 'Another task is already running. Wait for it to finish before starting another.'
+      });
+    }
     const id = newJobId();
+    activeJobId = id;
     jobs.set(id, { status: 'running', result: null, created: Date.now() });
     for (const [k, v] of jobs) {
       if (Date.now() - v.created > 3600000) jobs.delete(k);
@@ -528,6 +546,8 @@ const server = http.createServer(async (req, res) => {
           result: { success: false, charge: false, message: e.message || 'Server error' },
           created: Date.now(),
         });
+      } finally {
+        if (activeJobId === id) activeJobId = null;
       }
     })();
     return;

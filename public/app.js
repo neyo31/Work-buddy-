@@ -91,15 +91,40 @@
     const paused = me.status !== 'active', out = me.tokens < cost, busy = state.working || me.running;
     home.stage.classList.toggle('working', busy); home.startBtn.disabled = paused || out || busy;
     home.startLabel.replaceChildren(...(busy ? ['Working…'] : paused ? ['Paused'] : out ? ['Out of', h('br'), 'tokens'] : ['Start', h('br'), 'Work Buddy']));
-    home.headline.textContent = busy ? 'Work Buddy is on it' : paused ? 'Paused' : out ? 'No tokens left' : 'Ready when you are';
-    home.sub.textContent = out ? 'Buy tokens below.' : 'A finished run uses ' + cost + ' ' + plural(cost, 'token') + '.';
+    home.headline.textContent = busy ? 'Bot is searching Moodle' : paused ? 'Paused' : out ? 'No tokens left' : 'Ready when you are';
+    home.sub.textContent = busy
+      ? 'Please hold on. This may take a few minutes while Work Buddy checks your subjects. Keep this page open.'
+      : out ? 'Buy tokens below.' : 'A finished run uses ' + cost + ' ' + plural(cost, 'token') + '.';
     const r = state.result; home.resultBox.hidden = !r;
-    if (r) { home.resultBox.className = 'result ' + (r.ok ? 'good' : 'fail'); home.resultBox.textContent = r.message; }
+    if (r) {
+      home.resultBox.className = 'result ' + (r.ok ? 'good' : 'fail');
+      const nodes = [h('p', { text: r.message })];
+      if (Array.isArray(r.results) && r.results.length) {
+        const list = h('div', { class: 'activity-results' });
+        for (const item of r.results) {
+          const title = item.name || item.title || item.ariaLabel || 'Untitled Moodle activity';
+          const row = h('article', { class: 'activity-result' });
+          row.append(h('strong', { text: title }));
+          row.append(h('div', { class: 'muted small', text: (item.course || 'Moodle') + (item.activityType ? ' · ' + item.activityType : '') }));
+          if (item.statusText) row.append(h('p', { class: 'muted small', text: item.statusText }));
+          if (Array.isArray(item.attemptControls) && item.attemptControls.length) {
+            row.append(h('div', { class: 'attempt-controls' }, h('strong', { text: 'Button found on Moodle page:' })));
+            for (const control of item.attemptControls) {
+              row.append(h('div', { class: 'small', text: control.label + (control.href ? ' · ' + control.href : '') }));
+            }
+          }
+          if (item.href) row.append(h('a', { class: 'btn small', href: item.href, target: '_blank', rel: 'noopener', text: 'Check in Moodle' }));
+          list.append(row);
+        }
+        nodes.push(list);
+      }
+      home.resultBox.replaceChildren(...nodes);
+    }
   }
   async function pollMe() { if (document.hidden || !state.me) return; try { state.me = (await api('/api/me')).user; refreshHome(); } catch (e) { if (e.status === 401) signedOut(); } }
   async function startWork() {
     if (state.working) return; state.working = true; state.result = null; refreshHome();
-    try { const r = await api('/api/start', 'POST'); state.result = { ok: r.ok, message: r.message }; if (typeof r.tokens === 'number') state.me.tokens = r.tokens; }
+    try { const r = await api('/api/start', 'POST'); state.result = { ok: r.ok, message: r.message, results: r.result || [] }; if (typeof r.tokens === 'number') state.me.tokens = r.tokens; }
     catch (e) { if (e.status === 401) return signedOut(); state.result = { ok: false, message: e.message }; }
     finally { state.working = false; try { state.me = (await api('/api/me')).user; } catch {} refreshHome(); }
   }

@@ -131,6 +131,7 @@
               try { await navigator.clipboard.writeText(copyText); toast('Questions copied. Paste them into Gemini for explanations.'); }
               catch { toast('Clipboard access failed. Select and copy the questions manually.', true); }
             }}));
+            qWrap.append(h('a', { class: 'btn small', href: 'https://gemini.google.com/app', target: '_blank', rel: 'noopener', text: 'Open Gemini' }));
             row.append(qWrap);
           }
           list.append(row);

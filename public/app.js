@@ -67,7 +67,7 @@
   }
   function renderHome() {
     const tokenNum = h('strong', { text: '0' }), tokenLabel = h('span', { text: 'tokens' }), startLabel = h('span', {});
-    const mascot = h('span', { class: 'buddy-face', text: '🙂', 'aria-hidden': 'true' });
+    const mascot = makeBuddy('hello');
     const startBtn = h('button', { class: 'start-btn', type: 'button', onclick: startWork }); startBtn.append(mascot, startLabel);
     const stage = h('div', { class: 'start-stage' }, h('div', { class: 'ring' }), h('div', { class: 'ring two' }), startBtn);
     const progressBtn = h('button', { class: 'btn small', type: 'button', hidden: true, text: 'View progress', onclick: () => watchRunStatus() });
@@ -89,26 +89,70 @@
   }
   function showWelcomeTour() {
     let seen = false;
-    try { seen = localStorage.getItem('wb_tour_v1') === '1'; } catch {}
+    try { seen = localStorage.getItem('wb_tour_v2') === '1'; } catch {}
     if (seen) return;
+    let step = 0;
     const finish = () => {
-      try { localStorage.setItem('wb_tour_v1', '1'); } catch {}
+      try { localStorage.setItem('wb_tour_v2', '1'); } catch {}
       closeLayer();
     };
-    mountLayer(
-      h('div', { class: 'scrim', onclick: finish }),
-      h('section', { class: 'sheet tour-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'tour-title' },
-        h('div', { class: 'sheet-head' }, h('h2', { id: 'tour-title', text: 'Meet Work Buddy 👋' })),
-        h('p', { text: 'Your helper checks your Moodle courses and shows activities it can find.' }),
-        h('ol', {},
-          h('li', { text: 'Tap the circle to start a scan. It turns gray while work is in progress.' }),
-          h('li', { text: 'If you refresh, use View progress to reconnect to a running job.' }),
-          h('li', { text: 'Add tokens by entering a voucher code or uploading the PDF from your token seller.' }),
-          h('li', { text: 'Open an activity to review it. Work Buddy will not automatically answer or submit a live quiz.' })
-        ),
-        h('button', { class: 'btn primary block', type: 'button', text: 'Got it — let’s go', onclick: finish })
-      )
-    );
+    const render = () => {
+      const scenes = [
+        { title: 'Meet your Work Buddy', copy: 'Doing every worksheet by hand takes time. Your blue buddy is here to help you keep track of Moodle activities.', mode: 'manual', label: 'Next' },
+        { title: 'What if it took one click?', copy: 'Work Buddy checks your courses and brings the activities it finds into one clear place.', mode: 'run', label: 'Next' },
+        { title: 'Your buddy is on the move', copy: 'Watch him head out, check for work, then return with a result. No worksheets? He’ll let you know.', mode: 'demo', label: 'Let’s go' }
+      ];
+      const s = scenes[step];
+      const screen = h('section', { class: 'tour-screen', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'tour-title' });
+      const top = h('div', { class: 'tour-top' }, h('div', { class: 'tour-brand' }, h('span', { class: 'tour-brand-mark' }), h('span', { text: 'WORK BUDDY' })), h('button', { class: 'tour-skip', type: 'button', text: 'Skip', onclick: finish }));
+      const scene = h('div', { class: 'tour-scene ' + s.mode });
+      const circle = h('div', { class: 'tour-circle' });
+      const buddy = makeBuddy('hello');
+      buddy.classList.add('tour-buddy');
+      circle.append(buddy);
+      if (step === 0) {
+        circle.append(h('div', { class: 'manual-card card-one' }, h('span', { class: 'fake-line' }), h('span', { class: 'fake-line short' }), h('span', { class: 'fake-check' })));
+        circle.append(h('div', { class: 'manual-card card-two' }, h('span', { class: 'fake-line' }), h('span', { class: 'fake-line short' }), h('span', { class: 'fake-line' })));
+      } else if (step === 1) {
+        circle.append(h('div', { class: 'tour-orbit' }), h('div', { class: 'tour-orbit orbit-two' }), h('span', { class: 'tour-spark spark-one' }), h('span', { class: 'tour-spark spark-two' }));
+      } else {
+        scene.classList.add('demo-running');
+        circle.append(h('div', { class: 'tour-spinner' }), h('span', { class: 'tour-spark spark-one' }), h('span', { class: 'tour-spark spark-two' }));
+        const status = h('div', { class: 'tour-demo-status', text: 'Checking for worksheets…' });
+        circle.append(status);
+        const outcome = h('div', { class: 'tour-outcome', text: 'No worksheets right now' });
+        circle.append(outcome);
+        setTimeout(() => {
+          if (!screen.isConnected) return;
+          scene.classList.add('demo-finished');
+          buddy.classList.remove('buddy-hello');
+          buddy.classList.add('buddy-success');
+          status.textContent = 'Scan complete';
+          outcome.textContent = 'All done — nice work!';
+          setTimeout(() => {
+            if (!screen.isConnected) return;
+            scene.classList.add('demo-empty');
+            buddy.classList.remove('buddy-success');
+            buddy.classList.add('buddy-thinking');
+            status.textContent = 'Nothing waiting for you';
+            outcome.textContent = 'No worksheets to do right now.';
+          }, 2800);
+        }, 2600);
+      }
+      scene.append(circle);
+      const caption = h('div', { class: 'tour-caption' }, h('div', { class: 'tour-step', text: '0' + (step + 1) + ' / 03' }), h('h1', { id: 'tour-title', text: s.title }), h('p', { text: s.copy }));
+      const dots = h('div', { class: 'tour-dots' }, ...scenes.map((_, i) => h('span', { class: 'tour-dot' + (i === step ? ' active' : '') })));
+      const next = h('button', { class: 'btn primary tour-next', type: 'button', text: s.label, onclick: () => { if (step < scenes.length - 1) { step++; render(); } else finish(); } });
+      screen.append(top, scene, caption, h('div', { class: 'tour-footer' }, dots, next));
+      mountLayer(screen);
+    };
+    render();
+  }
+  function makeBuddy(mood = 'hello') {
+    const wrap = h('div', { class: 'buddy-art buddy-' + mood, 'aria-hidden': 'true' });
+    const svg = '<svg viewBox="0 0 160 190" role="img" aria-label="Blue Work Buddy mascot" xmlns="http://www.w3.org/2000/svg"><ellipse cx="80" cy="178" rx="42" ry="7" fill="#0a5fbd" opacity=".15"/><path d="M80 23V12" stroke="#4c9fff" stroke-width="7" stroke-linecap="round"/><circle cx="80" cy="10" r="7" fill="#a8d8ff" stroke="#2587ef" stroke-width="3"/><rect x="34" y="28" width="92" height="82" rx="26" fill="#2389f2" stroke="#0870d8" stroke-width="4"/><path d="M42 43Q80 16 118 43" fill="none" stroke="#77bdff" stroke-width="5" stroke-linecap="round"/><rect x="48" y="55" width="64" height="36" rx="15" fill="#eaf7ff"/><ellipse cx="66" cy="70" rx="5" ry="7" fill="#12549a"/><ellipse cx="94" cy="70" rx="5" ry="7" fill="#12549a"/><path d="M67 80Q80 91 93 80" fill="none" stroke="#12549a" stroke-width="3.5" stroke-linecap="round"/><path d="M43 113Q80 103 117 113L123 153Q80 167 37 153Z" fill="#2389f2" stroke="#0870d8" stroke-width="4"/><rect x="59" y="119" width="42" height="19" rx="9" fill="#b9e2ff"/><circle cx="80" cy="128" r="5" fill="#0870d8"/><path d="M40 120L23 140" stroke="#2389f2" stroke-width="12" stroke-linecap="round"/><circle cx="20" cy="143" r="10" fill="#a8d8ff" stroke="#0870d8" stroke-width="3"/><path d="M120 120L137 138" stroke="#2389f2" stroke-width="12" stroke-linecap="round"/><circle cx="140" cy="141" r="10" fill="#a8d8ff" stroke="#0870d8" stroke-width="3"/><path d="M58 155L53 170" stroke="#2389f2" stroke-width="12" stroke-linecap="round"/><path d="M102 155L107 170" stroke="#2389f2" stroke-width="12" stroke-linecap="round"/><rect x="40" y="167" width="26" height="12" rx="6" fill="#a8d8ff" stroke="#0870d8" stroke-width="3"/><rect x="94" y="167" width="26" height="12" rx="6" fill="#a8d8ff" stroke="#0870d8" stroke-width="3"/></svg>';
+    wrap.innerHTML = svg;
+    return wrap;
   }
   function refreshHome() {
     if (!home || !state.me) return;
@@ -118,7 +162,7 @@
     home.stage.classList.toggle('working', busy);
     home.startBtn.disabled = paused || out || busy;
     home.progressBtn.hidden = !busy;
-    home.mascot.textContent = busy ? '🪖' : paused ? '😴' : out ? '😐' : (state.result ? (state.result.ok ? '🥇' : '😢') : '🙂');
+    home.mascot.className = 'buddy-art buddy-face ' + (busy ? 'buddy-working' : paused || out ? 'buddy-thinking' : state.result ? (state.result.ok ? 'buddy-success' : 'buddy-fail') : 'buddy-hello');
     home.startLabel.replaceChildren(...(busy ? ['In', h('br'), 'Progress'] : paused ? ['Paused'] : out ? ['Out of', h('br'), 'tokens'] : ['Start', h('br'), 'Work Buddy']));
     home.headline.textContent = busy ? 'Bot is searching Moodle' : paused ? 'Paused' : out ? 'No tokens left' : 'Ready when you are';
     home.sub.textContent = busy

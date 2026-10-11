@@ -365,7 +365,7 @@ async function findQuizzes(page) {
         'a[href*="/mod/"][href*="/view.php"]',
         (as, courseName) =>
           as.map((a) => {
-            const clean = (v) => String(v || '').replace(/\\s+/g, ' ').trim();
+            const clean = (v) => String(v || '').replace(/\s+/g, ' ').trim();
             const parent = a.closest('.activity, .activity-item, .modtype_quiz, li, tr, .course-section') || a.parentElement;
             return {
               href: a.href,
@@ -428,7 +428,7 @@ async function doTheWork(payload) {
   const accountId = user.accountId || '';
   const password = user.schoolPassword || '';
   if (!accountId || !password) return { success: false, charge: false, message: 'Missing school account ID or password.' };
-  if (!GEMINI_KEY) return { success: false, charge: false, message: 'Bot is missing GEMINI_API_KEY. Add it in Render env for the bot service.' };
+  if (!GEMINI_KEY && !['inspect', 'prepare'].includes(payload.mode)) return { success: false, charge: false, message: 'Bot is missing GEMINI_API_KEY. Add it in Render env for the bot service.' };
 
   let browser;
   try {

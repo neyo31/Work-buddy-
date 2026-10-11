@@ -139,6 +139,7 @@
       }
       home.resultBox.replaceChildren(...nodes);
     }
+  }
   async function pollMe() { if (document.hidden || !state.me) return; try { state.me = (await api('/api/me')).user; refreshHome(); } catch (e) { if (e.status === 401) signedOut(); } }
   let watchingRun = false;
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

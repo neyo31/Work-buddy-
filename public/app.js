@@ -109,6 +109,7 @@
       const circle = h('div', { class: 'tour-circle' });
       const buddy = makeBuddy('hello');
       buddy.classList.add('tour-buddy');
+      let demoStatus = null, demoOutcome = null;
       circle.append(buddy);
       if (step === 0) {
         circle.append(h('div', { class: 'manual-card card-one' }, h('span', { class: 'fake-line' }), h('span', { class: 'fake-line short' }), h('span', { class: 'fake-check' })));
@@ -118,29 +119,27 @@
       } else {
         scene.classList.add('demo-running');
         circle.append(h('div', { class: 'tour-spinner' }), h('span', { class: 'tour-spark spark-one' }), h('span', { class: 'tour-spark spark-two' }));
-        const status = h('div', { class: 'tour-demo-status', text: 'Checking for worksheets…' });
-        circle.append(status);
-        const outcome = h('div', { class: 'tour-outcome', text: 'No worksheets right now' });
-        circle.append(outcome);
+        demoStatus = h('div', { class: 'tour-demo-status', text: 'Checking for worksheets…' });
+        demoOutcome = h('div', { class: 'tour-outcome', text: 'No worksheets right now' });
         setTimeout(() => {
           if (!screen.isConnected) return;
           scene.classList.add('demo-finished');
           buddy.classList.remove('buddy-hello');
           buddy.classList.add('buddy-success');
-          status.textContent = 'Scan complete';
-          outcome.textContent = 'All done — nice work!';
+          demoStatus.textContent = 'Scan complete';
+          demoOutcome.textContent = 'All done — nice work!';
           setTimeout(() => {
             if (!screen.isConnected) return;
             scene.classList.add('demo-empty');
             buddy.classList.remove('buddy-success');
             buddy.classList.add('buddy-thinking');
-            status.textContent = 'Nothing waiting for you';
-            outcome.textContent = 'No worksheets to do right now.';
+            demoStatus.textContent = 'Nothing waiting for you';
+            demoOutcome.textContent = 'No worksheets to do right now.';
           }, 2800);
         }, 2600);
       }
       scene.append(circle);
-      const caption = h('div', { class: 'tour-caption' }, h('div', { class: 'tour-step', text: '0' + (step + 1) + ' / 03' }), h('h1', { id: 'tour-title', text: s.title }), h('p', { text: s.copy }));
+      const caption = h('div', { class: 'tour-caption' }, h('div', { class: 'tour-step', text: '0' + (step + 1) + ' / 03' }), ...(demoStatus ? [demoStatus, demoOutcome] : []), h('h1', { id: 'tour-title', text: s.title }), h('p', { text: s.copy }));
       const dots = h('div', { class: 'tour-dots' }, ...scenes.map((_, i) => h('span', { class: 'tour-dot' + (i === step ? ' active' : '') })));
       const next = h('button', { class: 'btn primary tour-next', type: 'button', text: s.label, onclick: () => { if (step < scenes.length - 1) { step++; render(); } else finish(); } });
       screen.append(top, scene, caption, h('div', { class: 'tour-footer' }, dots, next));

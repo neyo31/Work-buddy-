@@ -82,18 +82,18 @@
     const topbar = h('header', { class: 'topbar' }, h('button', { class: 'menu-btn', type: 'button', 'aria-label': 'Open menu', onclick: openDrawer }, h('span'), h('span'), h('span')), h('div', { class: 'title', text: 'Work Buddy' }), h('div', { class: 'token-pill' }, tokenNum, tokenLabel));
     const main = h('main', { class: 'main' }, stage, h('div', { class: 'status' }, headline, sub), resultBox, buy, h('section', { class: 'card' }, h('h2', { text: 'Add tokens' }), drop, fileInput, h('div', { class: 'row' }, codeInput, codeBtn)));
     home = { tokenNum, tokenLabel, startBtn, startLabel, stage, headline, sub, resultBox };
-    root.replaceChildren(topbar, main); refreshHome(); clearInterval(pollTimer); pollTimer = setInterval(pollMe, 20000);
+    root.replaceChildren(topbar, main); refreshHome(); clearInterval(pollTimer); pollTimer = setInterval(pollMe, 20000); restoreRunStatus();
   }
   function refreshHome() {
     if (!home || !state.me) return;
     const me = state.me, cost = me.costPerRun;
     home.tokenNum.textContent = me.tokens; home.tokenLabel.textContent = plural(me.tokens, 'token');
     const paused = me.status !== 'active', out = me.tokens < cost, busy = state.working || me.running;
-    home.stage.classList.toggle('working', busy); home.startBtn.disabled = paused || out || busy;
-    home.startLabel.replaceChildren(...(busy ? ['Working…'] : paused ? ['Paused'] : out ? ['Out of', h('br'), 'tokens'] : ['Start', h('br'), 'Work Buddy']));
+    home.stage.classList.toggle('working', busy); home.startBtn.disabled = paused || out;
+    home.startLabel.replaceChildren(...(busy ? ['View', h('br'), 'Progress'] : paused ? ['Paused'] : out ? ['Out of', h('br'), 'tokens'] : ['Start', h('br'), 'Work Buddy']));
     home.headline.textContent = busy ? 'Bot is searching Moodle' : paused ? 'Paused' : out ? 'No tokens left' : 'Ready when you are';
     home.sub.textContent = busy
-      ? 'Please hold on. This may take a few minutes while Work Buddy checks your subjects. Keep this page open.'
+      ? 'Your scan is still running. You can refresh or leave this page; tap View Progress to reconnect to the same scan.'
       : out ? 'Buy tokens below.' : 'A finished run uses ' + cost + ' ' + plural(cost, 'token') + '.';
     const r = state.result; home.resultBox.hidden = !r;
     if (r) {
@@ -122,11 +122,71 @@
     }
   }
   async function pollMe() { if (document.hidden || !state.me) return; try { state.me = (await api('/api/me')).user; refreshHome(); } catch (e) { if (e.status === 401) signedOut(); } }
+  let watchingRun = false;
+  const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  function showRunResult(r) {
+    if (!r) return;
+    state.working = false;
+    state.result = { ok: !!r.ok, message: r.message || 'Scan finished.', results: Array.isArray(r.result) ? r.result : [] };
+    if (typeof r.tokens === 'number' && state.me) state.me.tokens = r.tokens;
+    refreshHome();
+  }
+  async function restoreRunStatus() {
+    try {
+      const r = await api('/api/run-status');
+      if (r.status === 'running') {
+        state.working = true; refreshHome();
+        watchRunStatus();
+      } else if (r.status === 'done' && r.result) {
+        showRunResult(r.result);
+      }
+    } catch (e) { if (e.status === 401) signedOut(); }
+  }
+  async function watchRunStatus() {
+    if (watchingRun) return;
+    watchingRun = true;
+    try {
+      for (;;) {
+        const r = await api('/api/run-status');
+        if (r.status !== 'running') {
+          if (r.status === 'done') showRunResult(r.result);
+          else { state.working = false; refreshHome(); }
+          try { state.me = (await api('/api/me')).user; } catch {}
+          refreshHome();
+          break;
+        }
+        state.working = true; refreshHome();
+        await pause(1500);
+      }
+    } catch (e) {
+      state.working = false; refreshHome();
+      if (e.status === 401) signedOut();
+      else toast('Could not check scan progress. Tap View Progress to reconnect.', true);
+    } finally { watchingRun = false; }
+  }
   async function startWork() {
-    if (state.working) return; state.working = true; state.result = null; refreshHome();
-    try { const r = await api('/api/start', 'POST'); state.result = { ok: r.ok, message: r.message, results: r.result || [] }; if (typeof r.tokens === 'number') state.me.tokens = r.tokens; }
-    catch (e) { if (e.status === 401) return signedOut(); state.result = { ok: false, message: e.message }; }
-    finally { state.working = false; try { state.me = (await api('/api/me')).user; } catch {} refreshHome(); }
+    if (state.working) {
+      watchRunStatus();
+      return;
+    }
+    state.working = true; state.result = null; refreshHome();
+    try {
+      const r = await api('/api/start', 'POST');
+      if (r.accepted && r.status === 'running') {
+        toast(r.message || 'Connected to your scan.');
+        await watchRunStatus();
+      } else {
+        state.working = false;
+        state.result = { ok: false, message: r.message || 'Could not start the scan.' };
+      }
+    } catch (e) {
+      if (e.status === 401) return signedOut();
+      state.working = false;
+      state.result = { ok: false, message: e.message };
+    } finally {
+      try { state.me = (await api('/api/me')).user; } catch {}
+      refreshHome();
+    }
   }
   async function redeem(payload, done) { try { const r = await api('/api/redeem', 'POST', payload); state.me.tokens = r.tokens; refreshHome(); toast(r.added + ' ' + plural(r.added, 'token') + ' added.'); if (done) done(); } catch (e) { if (e.status === 401) return signedOut(); toast(e.message, true); } }
   function redeemFile(file) { if (file.size > 2000000) return toast('File too big.', true); const reader = new FileReader(); reader.onload = () => redeem({ pdf: String(reader.result).split(',')[1] || '' }); reader.readAsDataURL(file); }

@@ -110,6 +110,29 @@
           row.append(h('strong', { text: title }));
           row.append(h('div', { class: 'muted small', text: item.course || 'Moodle' }));
           if (item.href) row.append(h('a', { class: 'btn small', href: item.href, target: '_blank', rel: 'noopener', text: 'Open worksheet' }));
+          if (item.isQuiz && item.href && !Array.isArray(item.questions)) {
+            row.append(h('button', { class: 'btn small', type: 'button', text: 'Start & read questions', onclick: () => prepareActivity(item) }));
+          }
+          if (Array.isArray(item.questions) && item.questions.length) {
+            const qWrap = h('div', { class: 'question-review' });
+            for (const q of item.questions) {
+              qWrap.append(h('p', { text: (q.number ? q.number + '. ' : '') + (q.question || '') }));
+              if (Array.isArray(q.choices) && q.choices.length) {
+                const choices = h('ul', {});
+                for (const choice of q.choices) choices.append(h('li', { text: choice }));
+                qWrap.append(choices);
+              }
+            }
+            const copyText = item.questions.map((q) => {
+              const choices = Array.isArray(q.choices) && q.choices.length ? '\\nChoices:\\n' + q.choices.map((c, i) => (i + 1) + '. ' + c).join('\\n') : '';
+              return (q.number || '') + '. ' + (q.question || '') + choices;
+            }).join('\\n\\n');
+            qWrap.append(h('button', { class: 'btn small', type: 'button', text: 'Copy questions for Gemini', onclick: async () => {
+              try { await navigator.clipboard.writeText(copyText); toast('Questions copied. Paste them into Gemini for explanations.'); }
+              catch { toast('Clipboard access failed. Select and copy the questions manually.', true); }
+            }}));
+            row.append(qWrap);
+          }
           list.append(row);
         }
         nodes.push(list);
@@ -158,6 +181,28 @@
       if (e.status === 401) signedOut();
       else toast('Could not check scan progress. Tap View Progress to reconnect.', true);
     } finally { watchingRun = false; }
+  }
+  async function prepareActivity(item) {
+    if (!item || !item.href || state.working) return;
+    state.working = true; state.result = null; refreshHome();
+    try {
+      const r = await api('/api/prepare', 'POST', {
+        targetHref: item.href,
+        targetName: item.name || item.title || item.ariaLabel || 'Selected Moodle quiz',
+        targetCourse: item.course || 'Moodle'
+      });
+      if (r.accepted && r.status === 'running') {
+        toast(r.message || 'Opening the selected quiz.');
+        await watchRunStatus();
+      } else {
+        state.working = false;
+        state.result = { ok: false, message: r.message || 'Could not start worksheet review.' };
+        refreshHome();
+      }
+    } catch (e) {
+      state.working = false; state.result = { ok: false, message: e.message || 'Could not start worksheet review.' };
+      refreshHome();
+    }
   }
   async function startWork() {
     if (state.working) {

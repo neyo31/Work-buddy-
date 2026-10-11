@@ -449,26 +449,38 @@ async function doTheWork(payload) {
       }
       await page.goto(target.href, { waitUntil: 'domcontentloaded', timeout: 45000 });
       await sleep(900);
-      const before = page.url();
-      const clicked = await page.evaluate(() => {
-        const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
-        const controls = [...document.querySelectorAll('form input[type="submit"], form button[type="submit"], form button:not([type]), form a.btn')];
-        const chosen = controls.find((el) => {
-          const label = clean(el.innerText || el.textContent || el.value || el.getAttribute('aria-label'));
-          const form = el.closest('form');
-          const action = String((form && form.action) || el.href || '');
-          return /start attempt|start quiz|continue (?:the )?(?:last )?attempt|resume attempt|re-attempt|attempt quiz/i.test(label)
-            && /\/mod\/quiz\//i.test(action);
+      let clicked = false;
+      // Register navigation wait BEFORE clicking: Moodle often navigates immediately
+      // when the form is submitted, so registering afterward can miss the event.
+      for (let step = 0; step < 3; step++) {
+        const nav = page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => null);
+        const didClick = await page.evaluate(() => {
+          const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+          const controls = [...document.querySelectorAll(
+            'form input[type="submit"], form button[type="submit"], form button:not([type]), form a.btn, form input[type="button"]'
+          )];
+          const chosen = controls.find((el) => {
+            const label = clean(el.innerText || el.textContent || el.value || el.getAttribute('aria-label'));
+            const form = el.closest('form');
+            const action = String((form && form.action) || el.href || '');
+            const visible = !!(el.getClientRects().length) && !el.disabled;
+            return visible &&
+              /start attempt|start quiz|continue (?:the )?(?:last )?attempt|resume attempt|re-attempt|attempt quiz/i.test(label) &&
+              /\/mod\/quiz\//i.test(action);
+          });
+          if (!chosen) return false;
+          chosen.click();
+          return true;
         });
-        if (!chosen) return false;
-        chosen.click();
-        return true;
-      });
-      if (clicked) {
-        await Promise.race([
-          page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 25000 }).catch(() => {}),
-          sleep(1800)
-        ]);
+        if (!didClick) { await nav; break; }
+        clicked = true;
+        await Promise.race([nav, sleep(5000)]);
+        await sleep(500);
+        // Continue once more if Moodle presents a separate confirmation page.
+        const attemptVisible = await page.evaluate(() =>
+          !!document.querySelector('.que, #page-mod-quiz-attempt, form#responseform')
+        ).catch(() => false);
+        if (attemptVisible) break;
       }
       const questions = await extractQuestions(page);
       if (!questions.length) {

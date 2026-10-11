@@ -67,8 +67,10 @@
   }
   function renderHome() {
     const tokenNum = h('strong', { text: '0' }), tokenLabel = h('span', { text: 'tokens' }), startLabel = h('span', {});
-    const startBtn = h('button', { class: 'start-btn', type: 'button', onclick: startWork }); startBtn.append(startLabel);
+    const mascot = h('span', { class: 'buddy-face', text: '🙂', 'aria-hidden': 'true' });
+    const startBtn = h('button', { class: 'start-btn', type: 'button', onclick: startWork }); startBtn.append(mascot, startLabel);
     const stage = h('div', { class: 'start-stage' }, h('div', { class: 'ring' }), h('div', { class: 'ring two' }), startBtn);
+    const progressBtn = h('button', { class: 'btn small', type: 'button', hidden: true, text: 'View progress', onclick: () => watchRunStatus() });
     const headline = h('div', { class: 'headline' }), sub = h('div', { class: 'muted small' }), resultBox = h('div', { class: 'result', hidden: true });
     const buy = h('a', { class: 'btn gold block', target: '_blank', rel: 'noopener', text: 'Buy tokens for Work Buddy' });
     buy.addEventListener('click', (e) => { if (!state.config.buyUrl) { e.preventDefault(); toast('Buy link not set.', true); } });
@@ -80,16 +82,43 @@
     const codeInput = h('input', { class: 'input', placeholder: 'Or type the code (WB-XXXX-...)' });
     const codeBtn = h('button', { class: 'btn', type: 'button', text: 'Redeem', onclick: () => { if (codeInput.value.trim()) redeem({ code: codeInput.value }, () => (codeInput.value = '')); } });
     const topbar = h('header', { class: 'topbar' }, h('button', { class: 'menu-btn', type: 'button', 'aria-label': 'Open menu', onclick: openDrawer }, h('span'), h('span'), h('span')), h('div', { class: 'title', text: 'Work Buddy' }), h('div', { class: 'token-pill' }, tokenNum, tokenLabel));
-    const main = h('main', { class: 'main' }, stage, h('div', { class: 'status' }, headline, sub), resultBox, buy, h('section', { class: 'card' }, h('h2', { text: 'Add tokens' }), drop, fileInput, h('div', { class: 'row' }, codeInput, codeBtn)));
-    home = { tokenNum, tokenLabel, startBtn, startLabel, stage, headline, sub, resultBox };
+    const main = h('main', { class: 'main' }, stage, h('div', { class: 'status' }, headline, sub, progressBtn), resultBox, buy, h('section', { class: 'card' }, h('h2', { text: 'Add tokens' }), drop, fileInput, h('div', { class: 'row' }, codeInput, codeBtn)));
+    home = { tokenNum, tokenLabel, startBtn, startLabel, mascot, stage, headline, sub, resultBox, progressBtn };
     root.replaceChildren(topbar, main); refreshHome(); clearInterval(pollTimer); pollTimer = setInterval(pollMe, 20000); restoreRunStatus();
+    showWelcomeTour();
+  }
+  function showWelcomeTour() {
+    let seen = false;
+    try { seen = localStorage.getItem('wb_tour_v1') === '1'; } catch {}
+    if (seen) return;
+    const finish = () => {
+      try { localStorage.setItem('wb_tour_v1', '1'); } catch {}
+      closeLayer();
+    };
+    mountLayer(
+      h('div', { class: 'scrim', onclick: finish }),
+      h('section', { class: 'sheet tour-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'tour-title' },
+        h('div', { class: 'sheet-head' }, h('h2', { id: 'tour-title', text: 'Meet Work Buddy 👋' })),
+        h('p', { text: 'Your helper checks your Moodle courses and shows activities it can find.' }),
+        h('ol', {},
+          h('li', { text: 'Tap the circle to start a scan. It turns gray while work is in progress.' }),
+          h('li', { text: 'If you refresh, use View progress to reconnect to a running job.' }),
+          h('li', { text: 'Add tokens by entering a voucher code or uploading the PDF from your token seller.' }),
+          h('li', { text: 'Open an activity to review it. Work Buddy will not automatically answer or submit a live quiz.' })
+        ),
+        h('button', { class: 'btn primary block', type: 'button', text: 'Got it — let’s go', onclick: finish })
+      )
+    );
   }
   function refreshHome() {
     if (!home || !state.me) return;
     const me = state.me, cost = me.costPerRun;
     home.tokenNum.textContent = me.tokens; home.tokenLabel.textContent = plural(me.tokens, 'token');
     const paused = me.status !== 'active', out = me.tokens < cost, busy = state.working || me.running;
-    home.stage.classList.toggle('working', busy); home.startBtn.disabled = paused || out;
+    home.stage.classList.toggle('working', busy);
+    home.startBtn.disabled = paused || out || busy;
+    home.progressBtn.hidden = !busy;
+    home.mascot.textContent = busy ? '🪖' : paused ? '😴' : out ? '😐' : (state.result ? (state.result.ok ? '🥇' : '😢') : '🙂');
     home.startLabel.replaceChildren(...(busy ? ['In', h('br'), 'Progress'] : paused ? ['Paused'] : out ? ['Out of', h('br'), 'tokens'] : ['Start', h('br'), 'Work Buddy']));
     home.headline.textContent = busy ? 'Bot is searching Moodle' : paused ? 'Paused' : out ? 'No tokens left' : 'Ready when you are';
     home.sub.textContent = busy

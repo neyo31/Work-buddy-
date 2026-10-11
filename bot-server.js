@@ -372,8 +372,8 @@ async function findQuizzes(page) {
               ariaLabel: clean(a.getAttribute('aria-label')),
               context: clean(parent && parent.innerText).slice(0, 500),
               statusText: clean(parent && parent.innerText).slice(0, 500),
-              activityType: (new URL(a.href)).pathname.match(/\\/mod\\/([^/]+)\\//)?.[1] || 'activity',
-              isQuiz: /\\/mod\\/quiz\\/view\\.php/.test(new URL(a.href).pathname),
+              activityType: (new URL(a.href)).pathname.split('/')[2] || 'activity',
+              isQuiz: (new URL(a.href)).pathname.includes('/mod/quiz/view.php'),
               course: courseName
             };
           }).filter((x) => x.name || x.title || x.ariaLabel || x.context),
@@ -386,9 +386,30 @@ async function findQuizzes(page) {
   }
   const seen = new Set();
   const uniqueActivities = quizzes.filter((q) => (seen.has(q.href) ? false : (seen.add(q.href), true)));
+  const quizActivities = uniqueActivities.filter((q) => q.isQuiz);
+  // Inspect quiz landing pages to report attempt/continue controls without clicking them.
+  for (const q of quizActivities) {
+    try {
+      await page.goto(q.href, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      q.attemptControls = await page.evaluate(() => {
+        const clean = (v) => String(v || '').replace(/\\s+/g, ' ').trim();
+        const nodes = [...document.querySelectorAll('a, button, input[type="submit"], input[type="button"]')];
+        return nodes.map((el) => {
+          const label = clean(el.innerText || el.textContent || el.value || el.getAttribute('aria-label') || el.getAttribute('title'));
+          const form = el.closest('form');
+          const href = el.href || (form ? form.action : '') || '';
+          return { label, href };
+        }).filter((x) => /attempt|continue|re-attempt|resume|start quiz|review/i.test(x.label)).slice(0, 8);
+      });
+      console.log('[bot] inspected quiz controls', q.course, q.name, (q.attemptControls || []).length);
+    } catch (e) {
+      q.attemptControls = [];
+      console.log('[bot] quiz landing inspection error', q.name, e.message);
+    }
+  }
   return {
     coursesCount: courses.length,
-    quizzes: uniqueActivities.filter((q) => q.isQuiz),
+    quizzes: quizActivities,
     activities: uniqueActivities
   };
 }
@@ -450,6 +471,7 @@ async function doTheWork(payload) {
           href: x.q.href,
           activityType: x.q.activityType,
           isQuiz: x.q.isQuiz,
+          attemptControls: x.q.attemptControls || [],
           name: x.q.name,
           title: x.q.title,
           ariaLabel: x.q.ariaLabel,

@@ -71,7 +71,26 @@
     const { codes } = await api('/api/admin/codes');
     const count = h('input', { class: 'input', type: 'number', value: '1', min: '1' });
     const tokens = h('input', { class: 'input', type: 'number', value: '2', min: '1' });
-    content.replaceChildren(h('div', { class: 'gen' }, count, tokens, h('button', { class: 'btn primary', type: 'button', text: 'Make vouchers', onclick: () => guarded(async () => { newCodes = await api('/api/admin/codes', 'POST', { count: Number(count.value), tokens: Number(tokens.value) }); load(); }) })), h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, ['Code', 'Tokens', 'Status'].map((t) => h('th', { text: t })))), h('tbody', {}, codes.slice(0, 50).map((c) => h('tr', {}, h('td', { class: 'mono', text: c.code }), h('td', { text: String(c.tokens) }), h('td', { text: c.usedAt ? 'Used' : 'Unused' })))))));
+    const downloadNew = newCodes && Array.isArray(newCodes.codes) && newCodes.codes.length
+      ? h('button', { class: 'btn', type: 'button', text: 'Download new voucher PDFs', onclick: async () => {
+          downloadNew.disabled = true;
+          try {
+            const url = '/api/admin/codes/pdf?codes=' + encodeURIComponent(newCodes.codes.join(','));
+            const res = await fetch(url, { credentials: 'same-origin' });
+            if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.error || 'Could not download voucher PDF.'); }
+            const blob = await res.blob(), objectUrl = URL.createObjectURL(blob), a = document.createElement('a');
+            a.href = objectUrl; a.download = 'work-buddy-vouchers.pdf'; document.body.append(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+            toast('Voucher PDF downloaded. Keep the PDF private until you sell it.');
+          } catch (e) { toast(e.message, true); }
+          finally { downloadNew.disabled = false; }
+        } })
+      : null;
+    content.replaceChildren(
+      h('div', { class: 'gen' }, count, tokens, h('button', { class: 'btn primary', type: 'button', text: 'Make vouchers', onclick: () => guarded(async () => { newCodes = await api('/api/admin/codes', 'POST', { count: Number(count.value), tokens: Number(tokens.value) }); load(); }) })),
+      newCodes && Array.isArray(newCodes.codes) ? h('p', { class: 'muted small', text: 'Created ' + newCodes.codes.length + ' voucher(s), ' + newCodes.tokens + ' token(s) each. Download the PDF before generating another batch.' }) : null,
+      downloadNew,
+      h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, ['Code', 'Tokens', 'Status'].map((t) => h('th', { text: t })))), h('tbody', {}, codes.slice(0, 50).map((c) => h('tr', {}, h('td', { class: 'mono', text: c.code }), h('td', { text: String(c.tokens) }), h('td', { text: c.usedAt ? 'Used' : 'Unused' })))))));
   }
   async function viewSettings() {
     const s = await api('/api/admin/settings');

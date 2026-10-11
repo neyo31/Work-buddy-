@@ -172,9 +172,15 @@
     if (r) {
       const items = Array.isArray(r.results) ? r.results : [];
       const found = items.length > 0;
+      const noWork = r.ok && !found;
       home.resultBox.className = 'result ' + (r.ok ? 'good' : 'fail');
-      const nodes = [h('strong', { text: r.ok ? (found ? 'Scan complete' : 'Scan finished') : 'Scan needs attention' })];
-      nodes.push(h('p', { text: found ? 'Found ' + items.length + ' Moodle activities. Choose one below to review.' : (r.message || 'No activities were returned. Try again in a moment.') }));
+      const nodes = [h('strong', { text: noWork ? 'No work to do right now' : r.ok ? 'Scan complete' : 'Scan needs attention' })];
+      const summary = found
+        ? 'Found ' + items.length + ' Moodle activities. Choose one below to review.'
+        : noWork
+          ? 'Your scan finished successfully, but no available worksheets or activities were found. You’re all caught up for now.'
+          : (r.message || 'The scanner could not finish. Please try again in a moment.');
+      nodes.push(h('p', { text: summary }));
       if (found) {
         const list = h('div', { class: 'activity-results' });
         for (const item of items) {

@@ -120,13 +120,14 @@
         scene.classList.add('demo-running');
         circle.append(h('div', { class: 'tour-spinner' }), h('span', { class: 'tour-spark spark-one' }), h('span', { class: 'tour-spark spark-two' }));
         demoStatus = h('div', { class: 'tour-demo-status', text: 'Checking for worksheets…' });
-        demoOutcome = h('div', { class: 'tour-outcome', text: 'No worksheets right now' });
+        demoOutcome = h('div', { class: 'tour-outcome', text: 'No worksheets right now', hidden: true });
         setTimeout(() => {
           if (!screen.isConnected) return;
           scene.classList.add('demo-finished');
           buddy.classList.remove('buddy-hello');
           buddy.classList.add('buddy-success');
           demoStatus.textContent = 'Scan complete';
+          demoOutcome.hidden = false;
           demoOutcome.textContent = 'All done — nice work!';
           setTimeout(() => {
             if (!screen.isConnected) return;

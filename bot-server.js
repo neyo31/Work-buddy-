@@ -132,25 +132,36 @@ async function askGemini(question, choices, subject) {
 async function extractQuestions(page) {
   return page.evaluate(() => {
     const blocks = [...document.querySelectorAll('.que, .question, [id^="question-"]')];
+    const clean = (s) => String(s || '').replace(/\\s+/g, ' ').trim();
     return blocks.map((q, idx) => {
       const stemEl = q.querySelector('.qtext, .formulation, .stem') || q;
-      const stem = (stemEl.innerText || '').trim().slice(0, 2500);
+      const stem = clean(stemEl.innerText).slice(0, 2500);
       const labels = [...q.querySelectorAll('.answer label, .answer .flex-fill, fieldset label, .answernumber + label')]
-        .map((el) => (el.innerText || '').trim())
+        .map((el) => clean(el.innerText))
         .filter((t) => t && t.length < 600);
-      const unique = [...new Set(labels)];
+      const selects = [...q.querySelectorAll('select')];
+      const selectOptions = selects.map((s) => [...s.options]
+        .map((o) => clean(o.textContent)).filter((t) => t && !/choose\.\.\.|select one|select/i.test(t)));
+      const unique = [...new Set([...labels, ...selectOptions.flat()])];
       const radios = q.querySelectorAll('input[type="radio"]');
       const checks = q.querySelectorAll('input[type="checkbox"]');
-      const texts = q.querySelectorAll('input[type="text"], textarea, input[type="number"]');
+      const texts = q.querySelectorAll('input[type="text"], textarea, input[type="number"], input[type="url"], input[type="email"]');
       let type = 'choice';
-      if (checks.length) type = 'multi';
+      if (selects.length) type = q.querySelectorAll('select').length > 1 ? 'matching' : 'dropdown';
+      else if (checks.length) type = 'multi';
       else if (texts.length && !radios.length) type = 'text';
       else if (radios.length) type = 'choice';
-      let answered = false;
-      if (radios.length) answered = [...radios].some((r) => r.checked);
-      if (checks.length) answered = [...checks].some((c) => c.checked);
-      if (texts.length) answered = [...texts].some((t) => (t.value || '').trim().length > 0);
-      return { index: idx, stem, choices: unique, type, id: q.id || ('q' + idx), answered };
+      const controls = [...q.querySelectorAll('input[type="radio"], input[type="checkbox"], input[type="text"], input[type="number"], textarea, select')];
+      const answered = controls.some((el) => {
+        if (el.matches('input[type="radio"], input[type="checkbox"]')) return el.checked;
+        if (el.tagName === 'SELECT') return el.selectedIndex > 0 && !!el.value;
+        return !!clean(el.value);
+      });
+      const fields = selects.map((s, si) => ({
+        label: clean(s.closest('tr, .form-group, .fitem, td')?.innerText || s.getAttribute('aria-label') || s.name || ('Dropdown ' + (si + 1))).slice(0, 500),
+        options: [...s.options].map((o) => clean(o.textContent)).filter(Boolean)
+      }));
+      return { index: idx, stem, choices: unique, type, fields, id: q.id || ('q' + idx), answered };
     }).filter((q) => q.stem.length > 5);
   });
 }
@@ -465,7 +476,7 @@ async function doTheWork(payload) {
             const action = String((form && form.action) || el.href || '');
             const visible = !!(el.getClientRects().length) && !el.disabled;
             return visible &&
-              /start attempt|start quiz|continue (?:the )?(?:last )?attempt|resume attempt|re-attempt|attempt quiz/i.test(label) &&
+              /start attempt|start quiz|continue(?: the)?(?: last)? attempt|continue attempt|resume attempt|re-attempt|attempt quiz/i.test(label) &&
               /\/mod\/quiz\//i.test(action);
           });
           if (!chosen) return false;
@@ -496,7 +507,8 @@ async function doTheWork(payload) {
         number: i + 1,
         question: q.stem,
         choices: q.choices,
-        type: q.type
+        type: q.type,
+        fields: q.fields || []
       }));
       return {
         success: true, charge: false, mode: 'prepare',

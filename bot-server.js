@@ -16,8 +16,8 @@ try {
   code = zlib.inflateRawSync(packed.subarray(2, packed.length - 4)).toString('utf8');
 }
 
-// Repair the known malformed fallback fragments caused by partial bundle updates.
-code = code.replace(/\|\| a'Item /g, "|| ('Item ");
+// Repair the repeated fallback-token corruption present in the stored parts.
+code = code.replace(/\|\| a'/g, "|| ('");
 new vm.Script(code, { filename: 'work-buddy-bot.bundle.js' });
 const bundle = path.join(__dirname, '.bot.bundle.js');
 fs.writeFileSync(bundle, code, 'utf8');

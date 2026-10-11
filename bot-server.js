@@ -1,9 +1,7 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const zlib = require('node:zlib');
-const parts = [0,1,2,3,4,5,6,7,8,9,10,11].map((i) => fs.readFileSync(path.join(__dirname, 'hx' + i + '.hex'), 'utf8').trim());
-const code = zlib.inflateSync(Buffer.from(parts.join(''), 'hex')).toString('utf8');
+const code = [0,1,2,3,4,5].map((i) => fs.readFileSync(path.join(__dirname, 'bfj' + i + '.js'), 'utf8')).join('');
 const bundle = path.join(__dirname, '.bot.bundle.js');
 fs.writeFileSync(bundle, code);
 require(bundle);

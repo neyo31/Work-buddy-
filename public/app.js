@@ -90,37 +90,32 @@
     home.tokenNum.textContent = me.tokens; home.tokenLabel.textContent = plural(me.tokens, 'token');
     const paused = me.status !== 'active', out = me.tokens < cost, busy = state.working || me.running;
     home.stage.classList.toggle('working', busy); home.startBtn.disabled = paused || out;
-    home.startLabel.replaceChildren(...(busy ? ['View', h('br'), 'Progress'] : paused ? ['Paused'] : out ? ['Out of', h('br'), 'tokens'] : ['Start', h('br'), 'Work Buddy']));
+    home.startLabel.replaceChildren(...(busy ? ['In', h('br'), 'Progress'] : paused ? ['Paused'] : out ? ['Out of', h('br'), 'tokens'] : ['Start', h('br'), 'Work Buddy']));
     home.headline.textContent = busy ? 'Bot is searching Moodle' : paused ? 'Paused' : out ? 'No tokens left' : 'Ready when you are';
     home.sub.textContent = busy
-      ? 'Your scan is still running. You can refresh or leave this page; tap View Progress to reconnect to the same scan.'
+      ? 'Work Buddy is checking your Moodle courses. You can leave and come back.'
       : out ? 'Buy tokens below.' : 'A finished run uses ' + cost + ' ' + plural(cost, 'token') + '.';
     const r = state.result; home.resultBox.hidden = !r;
     if (r) {
+      const items = Array.isArray(r.results) ? r.results : [];
+      const found = items.length > 0;
       home.resultBox.className = 'result ' + (r.ok ? 'good' : 'fail');
-      const nodes = [h('p', { text: r.message })];
-      if (Array.isArray(r.results) && r.results.length) {
+      const nodes = [h('strong', { text: r.ok ? (found ? 'Scan complete' : 'Scan finished') : 'Scan needs attention' })];
+      nodes.push(h('p', { text: found ? 'Found ' + items.length + ' Moodle activities. Choose one below to review.' : (r.message || 'No activities were returned. Try again in a moment.') }));
+      if (found) {
         const list = h('div', { class: 'activity-results' });
-        for (const item of r.results) {
-          const title = item.name || item.title || item.ariaLabel || 'Untitled Moodle activity';
+        for (const item of items) {
+          const title = item.name || item.title || item.ariaLabel || 'Moodle activity';
           const row = h('article', { class: 'activity-result' });
           row.append(h('strong', { text: title }));
-          row.append(h('div', { class: 'muted small', text: (item.course || 'Moodle') + (item.activityType ? ' · ' + item.activityType : '') }));
-          if (item.statusText) row.append(h('p', { class: 'muted small', text: item.statusText }));
-          if (Array.isArray(item.attemptControls) && item.attemptControls.length) {
-            row.append(h('div', { class: 'attempt-controls' }, h('strong', { text: 'Button found on Moodle page:' })));
-            for (const control of item.attemptControls) {
-              row.append(h('div', { class: 'small', text: control.label + (control.href ? ' · ' + control.href : '') }));
-            }
-          }
-          if (item.href) row.append(h('a', { class: 'btn small', href: item.href, target: '_blank', rel: 'noopener', text: 'Check in Moodle' }));
+          row.append(h('div', { class: 'muted small', text: item.course || 'Moodle' }));
+          if (item.href) row.append(h('a', { class: 'btn small', href: item.href, target: '_blank', rel: 'noopener', text: 'Open worksheet' }));
           list.append(row);
         }
         nodes.push(list);
       }
       home.resultBox.replaceChildren(...nodes);
     }
-  }
   async function pollMe() { if (document.hidden || !state.me) return; try { state.me = (await api('/api/me')).user; refreshHome(); } catch (e) { if (e.status === 401) signedOut(); } }
   let watchingRun = false;
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

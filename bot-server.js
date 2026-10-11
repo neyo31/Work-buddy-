@@ -16,12 +16,8 @@ try {
   code = zlib.inflateRawSync(packed.subarray(2, packed.length - 4)).toString('utf8');
 }
 
-// Repair the known malformed label fallback at the boundary between the
-// stored bundle fragments. Keep this narrow so unrelated code is untouched.
-code = code.replace(
-  "f.label || a'Item ' + (i + 1)))",
-  "f.label || ('Item ' + (i + 1)))"
-);
+// Repair the known malformed fallback fragments caused by partial bundle updates.
+code = code.replace(/\|\| a'Item /g, "|| ('Item ");
 new vm.Script(code, { filename: 'work-buddy-bot.bundle.js' });
 const bundle = path.join(__dirname, '.bot.bundle.js');
 fs.writeFileSync(bundle, code, 'utf8');

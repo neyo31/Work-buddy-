@@ -383,7 +383,8 @@ async function findQuizzes(page) {
     }
   }
   const seen = new Set();
-  return quizzes.filter((q) => (seen.has(q.href) ? false : (seen.add(q.href), true)));
+  const uniqueQuizzes = quizzes.filter((q) => (seen.has(q.href) ? false : (seen.add(q.href), true)));
+  return { coursesCount: courses.length, quizzes: uniqueQuizzes };
 }
 
 async function doTheWork(payload) {
@@ -403,7 +404,9 @@ async function doTheWork(payload) {
     page.setDefaultTimeout(45000);
 
     await moodleLogin(page, accountId, password);
-    const quizzes = await findQuizzes(page);
+    const discovery = await findQuizzes(page);
+    const quizzes = discovery.quizzes;
+    const scannedCourses = discovery.coursesCount;
 
     // Inspection mode is deliberately read-only: never open an attempt,
     // answer questions, navigate an attempt, or submit anything.
@@ -430,9 +433,9 @@ async function doTheWork(payload) {
         message: matches.length
           ? 'Found likely matching work: ' + matches.map((q) => (q.name || q.title || q.ariaLabel || 'Untitled quiz') + ' (' + q.course + ')').join(', ') + '. Inspection only: no attempt was started and no answers were changed or submitted.'
           : quizzes.length
-            ? 'Scanned ' + courses.length + ' course link(s) and found ' + quizzes.length + ' quiz link(s). No title matched "' + targetRaw + '". Showing the closest matches for review. No attempt was started.'
-            : 'No work found — please report this to an admin. Scanned ' + courses.length + ' course link(s) but found no quiz links. No attempt was started.',
-        scannedCourses: courses.length,
+            ? 'Scanned ' + scannedCourses + ' course link(s) and found ' + quizzes.length + ' quiz link(s). No title matched "' + targetRaw + '". Showing the closest matches for review. No attempt was started.'
+            : 'No work found — please report this to an admin. Scanned ' + scannedCourses + ' course link(s) but found no quiz links. No attempt was started.',
+        scannedCourses,
         quizCount: quizzes.length,
         result: (matches.length ? scored.filter((x) => x.matched) : candidates).map((x) => ({
           name: x.q.name,

@@ -180,7 +180,7 @@ function scheduleAllowed(ms, tz, anytime) {
   if (weekday === 'Sat' || weekday === 'Sun') return true;
   return hour * 60 + minute >= 13 * 60 + 30;
 }
-async function callBot(u, trigger) {
+async function callBot(u, trigger, options = {}) {
   if (!BOT_URL()) { await sleep(1500); return { success: false, charge: false, message: 'No bot is connected. Configure the bot URL in the admin panel.' }; }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), BOT_TIMEOUT);
@@ -190,7 +190,10 @@ async function callBot(u, trigger) {
     if (BOT_KEY) headers.authorization = 'Bearer ' + BOT_KEY;
     // Safe connection check: authenticate, sign in, and discover available work;
     // do not answer or submit a live one-attempt task automatically.
-    const payload = { user: { id: u.id, nickname: u.nickname, accountId: u.sid, schoolPassword: decodeSchoolPassword(u.school_pass_enc) }, trigger, mode: 'inspect' };
+    const payload = { user: { id: u.id, nickname: u.nickname, accountId: u.sid, schoolPassword: decodeSchoolPassword(u.school_pass_enc) }, trigger, mode: options.mode || 'inspect' };
+    if (options.targetHref) payload.targetHref = options.targetHref;
+    if (options.targetName) payload.targetName = options.targetName;
+    if (options.targetCourse) payload.targetCourse = options.targetCourse;
     const res = await fetch(botUrl, { method: 'POST', headers, body: JSON.stringify(payload), signal: ctrl.signal });
     let data = {};
     try { data = await res.json(); } catch {}
@@ -218,14 +221,14 @@ async function callBot(u, trigger) {
     return { success: false, charge: false, message: e.name === 'AbortError' ? 'The bot took too long.' : 'Could not reach the bot.' };
   } finally { clearTimeout(timer); }
 }
-async function executeRun(userId, trigger) {
+async function executeRun(userId, trigger, options = {}) {
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
   if (!u || u.status !== 'active') return { ok: false, message: 'Your account is paused.' };
   if (u.tokens < COST) return { ok: false, message: 'You are out of tokens.' };
   if (running.has(userId)) return { ok: false, message: 'Already working.' };
   running.add(userId);
   try {
-    const r = await callBot(u, trigger);
+    const r = await callBot(u, trigger, options);
     if (r.success && r.charge !== false) db.prepare('UPDATE users SET tokens = tokens - ? WHERE id = ? AND tokens >= ?').run(COST, userId, COST);
     db.prepare('INSERT INTO runs(user_id,trigger,success,message,created_at) VALUES(?,?,?,?,?)').run(userId, trigger, r.success ? 1 : 0, r.message || '', Date.now());
     return { ok: r.success, message: r.message, result: r.result || [], tokens: db.prepare('SELECT tokens FROM users WHERE id = ?').get(userId).tokens };
@@ -327,7 +330,8 @@ route('POST', '/api/login', null, async ({ req, res, body }) => {
   limit('login|' + clientIp(req), 12, 900000);
   const id = clean(body.identifier).toLowerCase(), pw = String(body.password ?? '');
   const user = db.prepare('SELECT * FROM users WHERE (email = ? OR sid = ?) AND role = ?').get(id, id, 'user');
-  if (!user || !checkPassword(pw, user.pass_hash)) bad('Wrong login or password.', 401);
+  if (!user) bad('No account was found for that email or account ID. If you signed up before a redeploy, the free Render SQLite database may have reset; durable account storage is not configured yet. You may need to sign up again.', 401);
+  if (!checkPassword(pw, user.pass_hash)) bad('Wrong login or password.', 401);
   if (user.status === 'revoked') bad('Account closed.', 403);
   if (!user.verified) return { needVerify: true, email: user.email, ...(await issueVerification(user)) };
   db.prepare('UPDATE users SET last_login = ? WHERE id = ?').run(Date.now(), user.id);
@@ -362,6 +366,35 @@ route('POST', '/api/start', 'user', ({ user }) => {
     record.result = { ok: false, message: error.message || 'The scan failed.', result: [], tokens: db.prepare('SELECT tokens FROM users WHERE id = ?').get(user.id)?.tokens };
   });
   return { accepted: true, runId: record.id, status: 'running', message: 'Scan started. You can leave this page and reconnect later.' };
+});
+route('POST', '/api/prepare', 'user', ({ user, body }) => {
+  limit('prepare|' + user.id, 8, 60000);
+  let target;
+  try { target = new URL(String(body.targetHref || '')); } catch {}
+  if (!target || target.origin !== 'https://elearning.gyaschool.net' || !/^\/mod\/quiz\/view\.php$/.test(target.pathname)) {
+    bad('Choose a quiz from the discovered activity list.', 400);
+  }
+  if (!user.school_pass_enc || !decodeSchoolPassword(user.school_pass_enc)) bad('School login details are missing or need to be updated.', 400);
+  const current = runRecords.get(user.id);
+  if (current && current.status === 'running') {
+    return { accepted: false, status: 'busy', message: 'Work Buddy is already running a scan or worksheet review. Wait for it to finish.' };
+  }
+  if (running.has(user.id)) return { accepted: false, status: 'busy', message: 'A scheduled task is already running. Please wait.' };
+  const record = { id: crypto.randomUUID(), userId: user.id, status: 'running', startedAt: Date.now(), result: null };
+  runRecords.set(user.id, record);
+  const options = {
+    mode: 'prepare',
+    targetHref: target.href,
+    targetName: clean(body.targetName || 'Selected Moodle quiz').slice(0, 180),
+    targetCourse: clean(body.targetCourse || 'Moodle').slice(0, 180)
+  };
+  Promise.resolve().then(() => executeRun(user.id, 'prepare', options)).then((result) => {
+    record.status = 'done'; record.finishedAt = Date.now(); record.result = result;
+  }).catch((error) => {
+    record.status = 'done'; record.finishedAt = Date.now();
+    record.result = { ok: false, message: error.message || 'Could not prepare the worksheet.', result: [] };
+  });
+  return { accepted: true, runId: record.id, status: 'running', message: 'Opening the selected quiz and reading its questions. Work Buddy will not answer or submit them.' };
 });
 route('POST', '/api/account/school', 'user', ({ user, body }) => {
   const max = user.school_edit_max == null ? 3 : user.school_edit_max;

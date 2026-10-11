@@ -467,7 +467,7 @@ async function doTheWork(payload) {
         scannedCourses,
         activityCount: activities.length,
         quizCount: quizzes.length,
-        result: (matches.length ? scored.filter((x) => x.matched) : candidates).map((x) => ({
+        result: candidates.map((x) => ({
           href: x.q.href,
           activityType: x.q.activityType,
           isQuiz: x.q.isQuiz,

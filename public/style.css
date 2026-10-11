@@ -238,3 +238,17 @@ tr:last-child td { border-bottom: 0; }
 .gen .field { margin: 0; }
 .newcodes { margin-bottom: 16px; }
 .newcodes .mono { margin-top: 12px; word-break: break-all; }
+
+/* Work Buddy v1.0 mascot and first-run tour */
+.buddy-face { display: block; font-size: 56px; line-height: 1; margin: 0 auto 8px; transform-origin: center; }
+.working .buddy-face { animation: buddy-run .65s ease-in-out infinite alternate; }
+.start-btn:disabled .buddy-face { filter: grayscale(1); opacity: .78; }
+@keyframes buddy-run {
+  from { transform: translateX(-4px) rotate(-5deg); }
+  to { transform: translateX(4px) rotate(5deg); }
+}
+.tour-card { position: fixed; z-index: 22; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(440px, calc(100vw - 28px)); max-height: 88vh; overflow: auto; }
+.tour-card p { margin: 10px 0 14px; color: var(--muted); }
+.tour-card ol { margin: 0 0 18px; padding-left: 22px; }
+.tour-card li { margin: 9px 0; }
+@media (prefers-reduced-motion: reduce) { .working .buddy-face { animation: none; } }

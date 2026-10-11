@@ -420,6 +420,21 @@ async function doTheWork(payload) {
 
     await moodleLogin(page, accountId, password);
     const quizzes = await findQuizzes(page);
+
+    // Inspection mode is deliberately read-only: never open an attempt,
+    // answer questions, navigate an attempt, or submit anything.
+    if (payload.mode === 'inspect') {
+      return {
+        success: true,
+        charge: false,
+        mode: 'inspect',
+        message: quizzes.length
+          ? 'School login succeeded. Found ' + quizzes.length + ' available quiz link(s). No attempt was started and no answers were changed or submitted.'
+          : 'School login succeeded. No quiz links were found. No attempt was started and no answers were changed or submitted.',
+        result: quizzes.map((q) => ({ name: q.name, course: q.course })),
+      };
+    }
+
     if (!quizzes.length) {
       return { success: true, charge: false, message: 'Logged in. No quizzes found right now. (No token used.)' };
     }

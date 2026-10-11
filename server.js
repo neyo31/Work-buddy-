@@ -137,6 +137,8 @@ function endSession(req, res, kind) {
   setCookie(res, COOKIE_NAME[kind], '', 0);
 }
 const running = new Set();
+// Keep manual scan state in memory so a refresh can reconnect to the same run.
+const runRecords = new Map();
 const publicUser = (u) => ({
   id: u.id, nickname: u.nickname, accountId: u.sid, email: u.email, tokens: u.tokens, status: u.status, anytime: !!u.anytime, costPerRun: COST, running: running.has(u.id),
   schoolEditLeft: Math.max(0, (u.school_edit_max == null ? 3 : u.school_edit_max) - (u.school_edit_count || 0)),
@@ -226,7 +228,7 @@ async function executeRun(userId, trigger) {
     const r = await callBot(u, trigger);
     if (r.success && r.charge !== false) db.prepare('UPDATE users SET tokens = tokens - ? WHERE id = ? AND tokens >= ?').run(COST, userId, COST);
     db.prepare('INSERT INTO runs(user_id,trigger,success,message,created_at) VALUES(?,?,?,?,?)').run(userId, trigger, r.success ? 1 : 0, r.message || '', Date.now());
-    return { ok: r.success, message: r.message, tokens: db.prepare('SELECT tokens FROM users WHERE id = ?').get(userId).tokens };
+    return { ok: r.success, message: r.message, result: r.result || [], tokens: db.prepare('SELECT tokens FROM users WHERE id = ?').get(userId).tokens };
   } finally { running.delete(userId); }
 }
 let schedBusy = false;
@@ -334,7 +336,33 @@ route('POST', '/api/login', null, async ({ req, res, body }) => {
 });
 route('POST', '/api/logout', null, ({ req, res }) => { endSession(req, res, 'user'); return { ok: true }; });
 route('GET', '/api/me', 'user', ({ user }) => ({ user: publicUser(user) }));
-route('POST', '/api/start', 'user', async ({ user }) => { limit('start|' + user.id, 20, 60000); return await executeRun(user.id, 'manual'); });
+route('GET', '/api/run-status', 'user', ({ user }) => {
+  const r = runRecords.get(user.id);
+  if (!r) return { status: 'idle' };
+  return { status: r.status, runId: r.id, startedAt: r.startedAt, finishedAt: r.finishedAt || null, result: r.result || null };
+});
+route('POST', '/api/start', 'user', ({ user }) => {
+  limit('start|' + user.id, 20, 60000);
+  const current = runRecords.get(user.id);
+  if (current && current.status === 'running') {
+    return { accepted: true, runId: current.id, status: 'running', message: 'Your existing scan is still running. Reconnecting to it now.' };
+  }
+  if (running.has(user.id)) {
+    return { accepted: false, status: 'busy', ok: false, message: 'A scheduled scan is already running for your account. Please wait a moment and check again.' };
+  }
+  const record = { id: crypto.randomUUID(), userId: user.id, status: 'running', startedAt: Date.now(), result: null };
+  runRecords.set(user.id, record);
+  Promise.resolve().then(() => executeRun(user.id, 'manual')).then((result) => {
+    record.status = 'done';
+    record.finishedAt = Date.now();
+    record.result = result;
+  }).catch((error) => {
+    record.status = 'done';
+    record.finishedAt = Date.now();
+    record.result = { ok: false, message: error.message || 'The scan failed.', result: [], tokens: db.prepare('SELECT tokens FROM users WHERE id = ?').get(user.id)?.tokens };
+  });
+  return { accepted: true, runId: record.id, status: 'running', message: 'Scan started. You can leave this page and reconnect later.' };
+});
 route('POST', '/api/account/school', 'user', ({ user, body }) => {
   const max = user.school_edit_max == null ? 3 : user.school_edit_max;
   const used = user.school_edit_count || 0;

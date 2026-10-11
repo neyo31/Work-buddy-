@@ -14,6 +14,8 @@ const GEMINI_KEY = (process.env.GEMINI_API_KEY || '').trim();
 const BASE = 'https://elearning.gyaschool.net';
 const MAX_QUIZZES = Number(process.env.MAX_QUIZZES || 5);
 const MAX_PAGES = Number(process.env.MAX_PAGES || 20);
+// Landing-page inspection is the slowest part of discovery; still return every activity.
+const MAX_INSPECT_QUIZZES = Math.max(1, Number(process.env.MAX_INSPECT_QUIZZES || 18));
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -387,8 +389,13 @@ async function findQuizzes(page) {
   const seen = new Set();
   const uniqueActivities = quizzes.filter((q) => (seen.has(q.href) ? false : (seen.add(q.href), true)));
   const quizActivities = uniqueActivities.filter((q) => q.isQuiz);
-  // Inspect quiz landing pages to report attempt/continue controls without clicking them.
-  for (const q of quizActivities) {
+  // Inspect a bounded batch of quiz landing pages; return every discovered activity,
+  // but avoid a multi-minute serial visit to every quiz on large Moodle accounts.
+  const inspectBatch = quizActivities.slice(0, MAX_INSPECT_QUIZZES);
+  console.log('[bot] activity discovery complete', 'courses=' + courses.length, 'activities=' + uniqueActivities.length, 'quizzes=' + quizActivities.length, 'landingPagesToInspect=' + inspectBatch.length);
+  for (let i = 0; i < inspectBatch.length; i++) {
+    const q = inspectBatch[i];
+    console.log('[bot] inspecting quiz landing page', (i + 1) + '/' + inspectBatch.length, q.course, q.name);
     try {
       await page.goto(q.href, { waitUntil: 'domcontentloaded', timeout: 30000 });
       q.attemptControls = await page.evaluate(() => {
@@ -410,7 +417,9 @@ async function findQuizzes(page) {
   return {
     coursesCount: courses.length,
     quizzes: quizActivities,
-    activities: uniqueActivities
+    activities: uniqueActivities,
+    inspectedQuizCount: inspectBatch.length,
+    totalQuizCount: quizActivities.length
   };
 }
 
@@ -467,6 +476,8 @@ async function doTheWork(payload) {
         scannedCourses,
         activityCount: activities.length,
         quizCount: quizzes.length,
+        inspectedQuizCount: discovery.inspectedQuizCount,
+        messageDetail: 'Attempt/continue controls were checked on ' + discovery.inspectedQuizCount + ' of ' + discovery.totalQuizCount + ' quiz pages to keep large scans responsive. All discovered activities are listed.',
         result: candidates.map((x) => ({
           href: x.q.href,
           activityType: x.q.activityType,

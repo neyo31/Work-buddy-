@@ -124,9 +124,9 @@
               }
             }
             const copyText = item.questions.map((q) => {
-              const choices = Array.isArray(q.choices) && q.choices.length ? '\\nChoices:\\n' + q.choices.map((c, i) => (i + 1) + '. ' + c).join('\\n') : '';
+              const choices = Array.isArray(q.choices) && q.choices.length ? '\nChoices:\n' + q.choices.map((c, i) => (i + 1) + '. ' + c).join('\n') : '';
               return (q.number || '') + '. ' + (q.question || '') + choices;
-            }).join('\\n\\n');
+            }).join('\n\n');
             qWrap.append(h('button', { class: 'btn small', type: 'button', text: 'Copy questions for Gemini', onclick: async () => {
               try { await navigator.clipboard.writeText(copyText); toast('Questions copied. Paste them into Gemini for explanations.'); }
               catch { toast('Clipboard access failed. Select and copy the questions manually.', true); }

@@ -355,7 +355,7 @@ async function findQuizzes(page) {
   });
 
   const quizzes = [];
-  for (const c of courses.slice(0, 12)) {
+  for (const c of courses) {
     try {
       await page.goto(c.href, { waitUntil: 'domcontentloaded', timeout: 45000 });
       await sleep(700);
@@ -371,6 +371,7 @@ async function findQuizzes(page) {
               title: clean(a.getAttribute('title')),
               ariaLabel: clean(a.getAttribute('aria-label')),
               context: clean(parent && parent.innerText).slice(0, 500),
+              statusText: clean(parent && parent.innerText).slice(0, 500),
               course: courseName
             };
           }).filter((x) => x.name || x.title || x.ariaLabel || x.context),
@@ -429,13 +430,16 @@ async function doTheWork(payload) {
         message: matches.length
           ? 'Found likely matching work: ' + matches.map((q) => (q.name || q.title || q.ariaLabel || 'Untitled quiz') + ' (' + q.course + ')').join(', ') + '. Inspection only: no attempt was started and no answers were changed or submitted.'
           : quizzes.length
-            ? 'No exact or all-word match for "' + targetRaw + '" among ' + quizzes.length + ' quiz link(s). Showing the closest worksheet titles for diagnosis. No attempt was started.'
-            : 'No work found — please report this to an admin. No quiz links were found. No attempt was started.',
+            ? 'Scanned ' + courses.length + ' course link(s) and found ' + quizzes.length + ' quiz link(s). No title matched "' + targetRaw + '". Showing the closest matches for review. No attempt was started.'
+            : 'No work found — please report this to an admin. Scanned ' + courses.length + ' course link(s) but found no quiz links. No attempt was started.',
+        scannedCourses: courses.length,
+        quizCount: quizzes.length,
         result: (matches.length ? scored.filter((x) => x.matched) : candidates).map((x) => ({
           name: x.q.name,
           title: x.q.title,
           ariaLabel: x.q.ariaLabel,
           context: x.q.context,
+          statusText: x.q.statusText,
           course: x.q.course,
           matchScore: Math.round(x.score * 100),
           requestedMatch: x.matched

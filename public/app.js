@@ -59,7 +59,7 @@
   }
   function verifyForm() {
     const v = state.verify; const wrap = h('div', {});
-    wrap.append(h('p', { class: 'tagline', text: 'We sent a 6-digit code to ' + v.email + '.' }));
+    wrap.append(h('p', { class: 'tagline', text: v.devCode ? 'Email delivery is not configured yet. Use the development code shown below to verify this account.' : ('We sent a 6-digit code to ' + v.email + '.') }));
     if (v.devCode) wrap.append(h('div', { class: 'msg info', text: 'Your verification code is ' + v.devCode + '. Enter it below.' }));
     wrap.append(formShell(async (fd) => afterAuthResponse(await api('/api/verify', 'POST', { email: v.email, code: fd.get('code') })), 'Verify and continue', h('div', { class: 'field' }, h('label', { for: 'code', text: 'Verification code' }), h('input', { class: 'input code-input', id: 'code', name: 'code', inputmode: 'numeric', maxlength: '6', required: true }))));
     wrap.append(h('div', { class: 'row' }, h('button', { class: 'btn small', type: 'button', text: 'Back', onclick: () => { state.verify = null; renderAuth(); } })));

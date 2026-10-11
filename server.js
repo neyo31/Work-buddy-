@@ -179,20 +179,41 @@ function scheduleAllowed(ms, tz, anytime) {
   return hour * 60 + minute >= 13 * 60 + 30;
 }
 async function callBot(u, trigger) {
-  if (!BOT_URL()) { await sleep(1500); return { success: true, charge: false, message: 'Demo mode: no bot connected.' }; }
+  if (!BOT_URL()) { await sleep(1500); return { success: false, charge: false, message: 'No bot is connected. Configure the bot URL in the admin panel.' }; }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), BOT_TIMEOUT);
   try {
+    const botUrl = BOT_URL();
     const headers = { 'content-type': 'application/json' };
     if (BOT_KEY) headers.authorization = 'Bearer ' + BOT_KEY;
-    const res = await fetch(BOT_URL(), { method: 'POST', headers, body: JSON.stringify({ user: { id: u.id, nickname: u.nickname, accountId: u.sid, schoolPassword: decodeSchoolPassword(u.school_pass_enc) }, trigger }), signal: ctrl.signal });
+    // Safe connection check: authenticate, sign in, and discover available work;
+    // do not answer or submit a live one-attempt task automatically.
+    const payload = { user: { id: u.id, nickname: u.nickname, accountId: u.sid, schoolPassword: decodeSchoolPassword(u.school_pass_enc) }, trigger, mode: 'inspect' };
+    const res = await fetch(botUrl, { method: 'POST', headers, body: JSON.stringify(payload), signal: ctrl.signal });
     let data = {};
     try { data = await res.json(); } catch {}
-    if (!res.ok) return { success: false, message: data.message || `Bot error (${res.status}).` };
+    if (!res.ok) return { success: false, charge: false, message: data.message || `Bot error (${res.status}).` };
+    if (data.accepted && data.jobId) {
+      const jobUrl = new URL('/job/' + encodeURIComponent(data.jobId), botUrl);
+      const deadline = Date.now() + BOT_TIMEOUT - 2500;
+      while (Date.now() < deadline) {
+        await sleep(1500);
+        const poll = await fetch(jobUrl, { headers, signal: ctrl.signal });
+        let job = {};
+        try { job = await poll.json(); } catch {}
+        if (!poll.ok) return { success: false, charge: false, message: job.message || `Bot status error (${poll.status}).` };
+        if (job.status === 'done' || job.status === 'error') {
+          const ok = job.success === true;
+          return { success: ok, charge: false, message: job.message || (ok ? 'Connection check finished.' : 'The bot could not finish the connection check.'), result: job.result };
+        }
+      }
+      return { success: false, charge: false, message: 'The bot job timed out before returning a result.' };
+    }
+    // Support older bot versions that return the final result directly.
     const ok = data.success === true;
-    return { success: ok, charge: ok && data.charge !== false, message: data.message || (ok ? 'Done.' : 'The bot could not finish the job.'), result: data.result };
+    return { success: ok, charge: false, message: data.message || (ok ? 'Connection check finished.' : 'The bot could not finish the connection check.'), result: data.result };
   } catch (e) {
-    return { success: false, message: e.name === 'AbortError' ? 'The bot took too long.' : 'Could not reach the bot.' };
+    return { success: false, charge: false, message: e.name === 'AbortError' ? 'The bot took too long.' : 'Could not reach the bot.' };
   } finally { clearTimeout(timer); }
 }
 async function executeRun(userId, trigger) {

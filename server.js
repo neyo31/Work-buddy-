@@ -396,6 +396,51 @@ route('POST', '/api/prepare', 'user', ({ user, body }) => {
   });
   return { accepted: true, runId: record.id, status: 'running', message: 'Opening the selected quiz and reading its questions. Work Buddy will not answer or submit them.' };
 });
+route('POST', '/api/gemini/solve', 'user', async ({ user, body, req }) => {
+  limit('gemini|' + user.id, 8, 60000);
+  const apiKey = env('GEMINI_API_KEY') || env('GOOGLE_GEMINI_API_KEY');
+  if (!apiKey) bad('Gemini is not connected yet. Add GEMINI_API_KEY to the Work Buddy website service in Render, then redeploy.', 503);
+  if (!Array.isArray(body.questions) || body.questions.length < 1 || body.questions.length > 80) bad('Send between 1 and 80 questions.');
+  const questions = body.questions.map((q, i) => ({
+    number: String(q.number || i + 1).slice(0, 20),
+    question: clean(q.question || '').slice(0, 3000),
+    choices: Array.isArray(q.choices) ? q.choices.slice(0, 20).map((c) => clean(c).slice(0, 500)) : []
+  }));
+  if (questions.some((q) => !q.question)) bad('One or more questions are empty.');
+  const prompt = [
+    'You are Work Buddy, a patient study tutor. Help the student understand these questions and work them out accurately.',
+    'For each numbered question, provide: likely answer or completed fill-in text; a short explanation; and confidence (high/medium/low).',
+    'For multiple-choice questions, include the matching choice text and its number/letter if identifiable. For fill-in questions, give the exact concise text to enter.',
+    'Do not invent missing context. If the question is ambiguous, explain what is missing and give the best qualified guidance.',
+    'Keep question numbers exactly as provided. Return readable plain text, one clearly separated section per question.',
+    'Questions and choices:',
+    JSON.stringify(questions)
+  ].join('\n\n');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 90000);
+  try {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 8192 }
+      }),
+      signal: ctrl.signal
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.error('Gemini API request failed:', response.status, JSON.stringify(data.error || {}).slice(0, 500));
+      bad(response.status === 429 ? 'Gemini is busy or its quota is exhausted. Try again shortly.' : 'Gemini could not answer this request. Check the API key and model access in Render.', 502);
+    }
+    const answer = (data.candidates || []).flatMap((c) => c.content?.parts || []).map((p) => p.text || '').join('\n').trim();
+    if (!answer) bad('Gemini returned no answer. Try again.', 502);
+    return { ok: true, answer, model: data.modelVersion || 'gemini-2.5-flash' };
+  } catch (e) {
+    if (e instanceof HttpError) throw e;
+    bad(e.name === 'AbortError' ? 'Gemini took too long. Try again.' : 'Could not reach Gemini. Try again.', 502);
+  } finally { clearTimeout(timer); }
+});
 route('POST', '/api/account/school', 'user', ({ user, body }) => {
   const max = user.school_edit_max == null ? 3 : user.school_edit_max;
   const used = user.school_edit_count || 0;

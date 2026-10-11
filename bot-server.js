@@ -359,7 +359,7 @@ async function findQuizzes(page) {
     try {
       await page.goto(c.href, { waitUntil: 'domcontentloaded', timeout: 45000 });
       await sleep(700);
-      const found = await page.$eval(
+      const found = await page.$$eval(
         'a[href*="/mod/quiz/view.php"]',
         (as, courseName) =>
           as.map((a) => {

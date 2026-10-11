@@ -241,37 +241,9 @@ async function countAnsweredOnPage(page) {
   });
 }
 
-async function finishAndSubmit(page) {
-  await clickIfExists(page, [
-    'input[name="next"][value*="Finish" i]',
-    'button[name="next"]',
-    'input[value*="Finish attempt" i]',
-    'a[href*="finishattempt"]',
-    '.endtestlink a',
-    'input[type="submit"][value*="Finish" i]',
-  ]);
-  await sleep(1500);
-  await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 25000 }).catch(() => {});
-
-  await clickIfExists(page, [
-    'button[type="submit"]',
-    'input[type="submit"][value*="Submit all and finish" i]',
-    'input[type="submit"][value*="Submit" i]',
-    'input[name="submit"]',
-    '#mod_quiz-next-nav',
-  ]);
-  await sleep(1200);
-
-  await clickIfExists(page, [
-    '.moodle-dialogue-base button.btn-primary',
-    'input[type="submit"][value*="Submit" i]',
-    'button[type="submit"]',
-    'input[name="submitdata"]',
-    '#id_submitbutton',
-    '.modal-footer button.btn-primary',
-  ]);
-  await sleep(1500);
-  await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+async function finishAndSubmit(_page) {
+  // Hard safety lock: this bot must never submit or finish a quiz attempt.
+  throw new Error('Submission is disabled. No attempt will be submitted or finished.');
 }
 
 async function answerQuizPages(page, subject) {
@@ -436,7 +408,7 @@ async function doTheWork(payload) {
     }
 
     if (!quizzes.length) {
-      return { success: true, charge: false, message: 'Logged in. No quizzes found right now. (No token used.)' };
+      return { success: true, charge: false, message: 'No work found — please report this to an admin. Logged in, but no quizzes were found right now. (No token used.)' };
     }
 
     const results = [];

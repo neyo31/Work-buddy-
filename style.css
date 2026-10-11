@@ -238,3 +238,12 @@ tr:last-child td { border-bottom: 0; }
 .gen .field { margin: 0; }
 .newcodes { margin-bottom: 16px; }
 .newcodes .mono { margin-top: 12px; word-break: break-all; }
+
+
+.activity-results { display: grid; gap: 10px; margin-top: 14px; }
+.activity-result { padding: 12px; border: 1px solid var(--line); border-radius: 12px; overflow-wrap: anywhere; background: var(--panel); }
+.activity-result > strong { display: block; margin-bottom: 5px; }
+.activity-result p { margin: 8px 0; white-space: pre-wrap; }
+.activity-result .btn { display: inline-flex; margin-top: 10px; text-decoration: none; }
+.attempt-controls { margin-top: 10px; }
+.attempt-controls + .small { overflow-wrap: anywhere; }

@@ -246,9 +246,15 @@ async function executeRun(userId, trigger, options = {}) {
   running.add(userId);
   try {
     const r = await callBot(u, trigger, options);
-    if (r.success && r.charge !== false) db.prepare('UPDATE users SET tokens = tokens - ? WHERE id = ? AND tokens >= ?').run(COST, userId, COST);
-    db.prepare('INSERT INTO runs(user_id,trigger,success,message,created_at) VALUES(?,?,?,?,?)').run(userId, trigger, r.success ? 1 : 0, r.message || '', Date.now());
-    return { ok: r.success, message: r.message, result: r.result || [], tokens: db.prepare('SELECT tokens FROM users WHERE id = ?').get(userId).tokens };
+    const items = Array.isArray(r.result) ? r.result : [];
+    let msg = String(r.message || '').trim();
+    let ok = r.success === true;
+    if (!ok && /no open work|no work right now|no quizzes were found|caught up|none had an open/i.test(msg)) ok = true;
+    if (ok && !msg) msg = items.length ? 'Done.' : 'No work to do right now.';
+    if (!ok && !msg) msg = 'The scan could not finish. Please try again.';
+    if (ok && r.charge === true) db.prepare('UPDATE users SET tokens = tokens - ? WHERE id = ? AND tokens >= ?').run(COST, userId, COST);
+    db.prepare('INSERT INTO runs(user_id,trigger,success,message,created_at) VALUES(?,?,?,?,?)').run(userId, trigger, ok ? 1 : 0, msg, Date.now());
+    return { ok, message: msg, result: items, tokens: db.prepare('SELECT tokens FROM users WHERE id = ?').get(userId).tokens };
   } finally { running.delete(userId); }
 }
 let schedBusy = false;
@@ -500,7 +506,7 @@ const server = http.createServer(async (req, res) => {
         if (err) { res.writeHead(404); return res.end('Not found'); }
         const ext = path.extname(file);
         const types = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' };
-        res.writeHead(200, { 'content-type': types[ext] || 'application/octet-stream', 'cache-control': ext === '.html' ? 'no-store' : 'public, max-age=300' });
+        res.writeHead(200, { 'content-type': types[ext] || 'application/octet-stream', 'cache-control': (ext === '.html' || ext === '.js') ? 'no-store' : 'public, max-age=300' });
         res.end(buf);
       });
       return;

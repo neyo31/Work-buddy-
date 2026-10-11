@@ -322,3 +322,9 @@ tr:last-child td { border-bottom: 0; }
 @media (prefers-reduced-motion:reduce) {
  .buddy-working,.buddy-success svg,.buddy-fail svg,.buddy-thinking svg,.tour-orbit,.tour-spinner,.tour-buddy,.tour-spark { animation:none!important;transition:none!important; }
 }
+
+/* Demo narration belongs below the circle, never inside the mascot window. */
+.tour-caption { position:relative; }
+.tour-demo-status,.tour-outcome { position:static; display:block; opacity:1; color:#8fc8ff; text-align:center; font-size:12px; line-height:1.5; margin:0 auto 7px; font-weight:800; }
+.tour-outcome { color:#bce5ff; font-size:13px; }
+.tour-demo-status[hidden],.tour-outcome[hidden] { display:none; }

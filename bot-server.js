@@ -451,7 +451,7 @@ async function doTheWork(payload) {
       await sleep(900);
       const before = page.url();
       const clicked = await page.evaluate(() => {
-        const clean = (s) => String(s || '').replace(/\\s+/g, ' ').trim();
+        const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
         const controls = [...document.querySelectorAll('form input[type="submit"], form button[type="submit"], form button:not([type]), form a.btn')];
         const chosen = controls.find((el) => {
           const label = clean(el.innerText || el.textContent || el.value || el.getAttribute('aria-label'));

@@ -440,6 +440,65 @@ async function doTheWork(payload) {
     page.setDefaultTimeout(45000);
 
     await moodleLogin(page, accountId, password);
+
+    if (payload.mode === 'prepare') {
+      let target;
+      try { target = new URL(String(payload.targetHref || '')); } catch {}
+      if (!target || target.origin !== BASE || !/^\/mod\/quiz\/view\.php$/.test(target.pathname)) {
+        return { success: false, charge: false, message: 'Choose a quiz activity from the discovered list first.' };
+      }
+      await page.goto(target.href, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await sleep(900);
+      const before = page.url();
+      const clicked = await page.evaluate(() => {
+        const clean = (s) => String(s || '').replace(/\\s+/g, ' ').trim();
+        const controls = [...document.querySelectorAll('form input[type="submit"], form button[type="submit"], form button:not([type]), form a.btn')];
+        const chosen = controls.find((el) => {
+          const label = clean(el.innerText || el.textContent || el.value || el.getAttribute('aria-label'));
+          const form = el.closest('form');
+          const action = String((form && form.action) || el.href || '');
+          return /start attempt|start quiz|continue (?:the )?(?:last )?attempt|resume attempt|re-attempt|attempt quiz/i.test(label)
+            && /\/mod\/quiz\//i.test(action);
+        });
+        if (!chosen) return false;
+        chosen.click();
+        return true;
+      });
+      if (clicked) {
+        await Promise.race([
+          page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 25000 }).catch(() => {}),
+          sleep(1800)
+        ]);
+      }
+      const questions = await extractQuestions(page);
+      if (!questions.length) {
+        return {
+          success: false, charge: false,
+          message: clicked
+            ? 'The attempt page opened, but no readable questions were detected. Check the worksheet in Moodle.'
+            : 'No Start/Continue attempt control was found. Open the worksheet link in Moodle and check whether an attempt is already active.',
+          result: []
+        };
+      }
+      const cleanQuestions = questions.map((q, i) => ({
+        number: i + 1,
+        question: q.stem,
+        choices: q.choices,
+        type: q.type
+      }));
+      return {
+        success: true, charge: false, mode: 'prepare',
+        message: (clicked ? 'Attempt opened. ' : 'Questions found on the current attempt page. ') +
+          'Extracted ' + cleanQuestions.length + ' question(s). Review them, then copy them to Gemini if you want help understanding them. Work Buddy did not answer or submit anything.',
+        result: [{
+          name: String(payload.targetName || 'Selected Moodle quiz').slice(0, 180),
+          course: String(payload.targetCourse || 'Moodle').slice(0, 180),
+          href: target.href,
+          questions: cleanQuestions
+        }]
+      };
+    }
+
     const discovery = await findQuizzes(page);
     const quizzes = discovery.quizzes;
     const activities = discovery.activities;
@@ -569,12 +628,13 @@ const server = http.createServer(async (req, res) => {
     try { payload = await readJson(req); } catch (e) {
       return send(res, 400, { success: false, message: 'Bad JSON body.' });
     }
-    // Keep production behavior read-only until a safe practice-environment test is authorized.
-    if (payload.mode !== 'inspect') {
+    // Allowed modes: read-only discovery, or user-selected attempt start + question extraction.
+    // This bot never generates answers, fills responses, or submits quiz attempts.
+    if (!['inspect', 'prepare'].includes(payload.mode)) {
       return send(res, 409, {
         success: false,
         charge: false,
-        message: 'Only read-only inspection is enabled. No attempt will be started, answered, or submitted.'
+        message: 'Only inspection and user-selected question review are enabled. Answering and submission remain disabled.'
       });
     }
     if (activeJobId) {

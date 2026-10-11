@@ -93,28 +93,54 @@
       h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, ['Code', 'Tokens', 'Status'].map((t) => h('th', { text: t })))), h('tbody', {}, codes.slice(0, 50).map((c) => h('tr', {}, h('td', { class: 'mono', text: c.code }), h('td', { text: String(c.tokens) }), h('td', { text: c.usedAt ? 'Used' : 'Unused' })))))));
   }
   async function viewSettings() {
-    const s = await api('/api/admin/settings');
-    const connected = !!(s.botUrl && String(s.botUrl).trim());
-    const status = h('div', { class: 'msg ' + (connected ? 'info' : 'error'), text: connected ? ('Bot connected: ' + s.botUrl) : 'Demo mode — Bot URL is empty. Paste the bot URL below and Save.' });
-    const buyUrl = h('input', { class: 'input', value: s.buyUrl || '', placeholder: 'https://...' });
-    const botUrl = h('input', { class: 'input', value: s.botUrl || '', placeholder: 'https://work-buddy-2.onrender.com/run-bot' });
+    const cfg = await api('/api/admin/settings');
+    const connected = !!(cfg.botUrl && String(cfg.botUrl).trim());
+    const statusTop = h('div', { class: 'msg ' + (connected ? 'info' : 'error'), text: connected ? ('Bot connected: ' + cfg.botUrl) : 'Demo mode — Bot URL is empty. Paste the bot URL below and Save.' });
+    const buyUrl = h('input', { class: 'input', type: 'url', value: cfg.buyUrl || '', placeholder: 'https://...' });
+    const botUrl = h('input', { class: 'input', type: 'url', value: cfg.botUrl || '', placeholder: 'https://your-bot.onrender.com/' });
+    const auto = h('input', { type: 'checkbox' });
+    auto.checked = !!cfg.autoWork;
+    const autoStatus = h('span', { class: 'muted small', text: cfg.autoWork ? 'Auto-work is ON' : 'Auto-work is OFF (scan only)' });
     const btn = h('button', { class: 'btn primary', type: 'button', text: 'Save settings' });
-    const note = h('p', { class: 'muted small', text: 'After Save you should see “Bot connected” above. If it goes back to Demo after a redeploy, also set BOT_WEBHOOK_URL on the website service in Render.' });
     btn.onclick = () => guarded(async () => {
       btn.disabled = true; btn.textContent = 'Saving…';
       try {
-        const r = await api('/api/admin/settings', 'POST', { buyUrl: buyUrl.value.trim(), botUrl: botUrl.value.trim() });
+        const r = await api('/api/admin/settings', 'POST', {
+          buyUrl: buyUrl.value.trim(),
+          botUrl: botUrl.value.trim(),
+          autoWork: !!auto.checked
+        });
         buyUrl.value = r.buyUrl || '';
         botUrl.value = r.botUrl || '';
+        auto.checked = !!r.autoWork;
+        autoStatus.textContent = r.autoWork ? 'Auto-work is ON' : 'Auto-work is OFF (scan only)';
         const ok = !!(r.botUrl && String(r.botUrl).trim());
-        status.className = 'msg ' + (ok ? 'info' : 'error');
-        status.textContent = ok ? ('Saved. Bot connected: ' + r.botUrl) : 'Saved, but Bot URL is still empty.';
-        toast(ok ? 'Settings saved — bot connected.' : 'Saved, but Bot URL is empty.', !ok);
+        statusTop.className = 'msg ' + (ok ? 'info' : 'error');
+        statusTop.textContent = ok ? ('Saved. Bot connected: ' + r.botUrl) : 'Saved, but Bot URL is still empty.';
+        toast(r.autoWork ? 'Settings saved. Auto-work is ON.' : 'Settings saved. Auto-work is OFF (scan only).');
       } finally {
         btn.disabled = false; btn.textContent = 'Save settings';
       }
     });
-    content.replaceChildren(status, h('div', { class: 'card' }, h('h2', { text: 'Buy URL' }), buyUrl), h('div', { class: 'card' }, h('h2', { text: 'Bot URL' }), botUrl, note), btn);
+    content.replaceChildren(
+      statusTop,
+      h('div', { class: 'card' },
+        h('h2', { text: 'Bot connection' }),
+        h('p', { class: 'muted small', text: 'Bot webhook URL for Work Buddy (Render bot service).' }),
+        h('div', { class: 'field' }, h('label', { text: 'Bot URL' }), botUrl),
+        h('div', { class: 'field' }, h('label', { text: 'Buy tokens URL' }), buyUrl)
+      ),
+      h('div', { class: 'card' },
+        h('h2', { text: 'Auto-work (admin controlled)' }),
+        h('p', { class: 'muted small', text: 'When ON, Start Work Buddy logs in, finds open work, fills answers with Gemini, and finishes attempts. When OFF, it only scans.' }),
+        h('label', { class: 'row', style: 'gap:10px;align-items:center;display:flex;margin:12px 0' },
+          auto,
+          h('span', { text: 'Enable auto-work (answer + finish)' })
+        ),
+        autoStatus
+      ),
+      h('div', { class: 'actions', style: 'margin-top:12px' }, btn)
+    );
   }
   (async () => { try { await api('/api/admin/check'); showPanel(); } catch { showLogin(); } })();
 })();

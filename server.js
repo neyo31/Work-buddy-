@@ -180,6 +180,23 @@ function scheduleAllowed(ms, tz, anytime) {
   if (weekday === 'Sat' || weekday === 'Sun') return true;
   return hour * 60 + minute >= 13 * 60 + 30;
 }
+async function fetchBotJobStatus(jobUrl, headers, signal) {
+  // Status checks are safe to retry: they only read the existing job and never start work again.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let poll, job = {};
+    try {
+      poll = await fetch(jobUrl, { headers, signal });
+      try { job = await poll.json(); } catch {}
+    } catch (e) {
+      if (attempt === 2 || e.name === 'AbortError') throw e;
+      await sleep(1000 * (attempt + 1));
+      continue;
+    }
+    if (poll.ok || ![502, 503, 504].includes(poll.status) || attempt === 2) return { poll, job };
+    await sleep(1000 * (attempt + 1));
+  }
+  return { poll: { ok: false, status: 502 }, job: {} };
+}
 async function callBot(u, trigger, options = {}) {
   if (!BOT_URL()) { await sleep(1500); return { success: false, charge: false, message: 'No bot is connected. Configure the bot URL in the admin panel.' }; }
   const ctrl = new AbortController();
@@ -197,16 +214,19 @@ async function callBot(u, trigger, options = {}) {
     const res = await fetch(botUrl, { method: 'POST', headers, body: JSON.stringify(payload), signal: ctrl.signal });
     let data = {};
     try { data = await res.json(); } catch {}
-    if (!res.ok) return { success: false, charge: false, message: data.message || `Bot error (${res.status}).` };
+    if (!res.ok) {
+      const transient = [502, 503, 504].includes(res.status);
+      return { success: false, charge: false, message: data.message || (transient
+        ? `The bot service is temporarily unavailable (HTTP ${res.status}). No tokens were charged. Wait a few seconds and try again.`
+        : `Bot error (${res.status}).`) };
+    }
     if (data.accepted && data.jobId) {
       const jobUrl = new URL('/job/' + encodeURIComponent(data.jobId), botUrl);
       const deadline = Date.now() + BOT_TIMEOUT - 2500;
       while (Date.now() < deadline) {
         await sleep(1500);
-        const poll = await fetch(jobUrl, { headers, signal: ctrl.signal });
-        let job = {};
-        try { job = await poll.json(); } catch {}
-        if (!poll.ok) return { success: false, charge: false, message: job.message || `Bot status error (${poll.status}).` };
+        const { poll, job } = await fetchBotJobStatus(jobUrl, headers, ctrl.signal);
+        if (!poll.ok) return { success: false, charge: false, message: job.message || `Bot status error (${poll.status}). No tokens were charged.` };
         if (job.status === 'done' || job.status === 'error') {
           const ok = job.success === true;
           return { success: ok, charge: false, message: job.message || (ok ? 'Connection check finished.' : 'The bot could not finish the connection check.'), result: job.result };

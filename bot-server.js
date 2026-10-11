@@ -360,7 +360,7 @@ async function findQuizzes(page) {
       await page.goto(c.href, { waitUntil: 'domcontentloaded', timeout: 45000 });
       await sleep(700);
       const found = await page.$$eval(
-        'a[href*="/mod/quiz/view.php"]',
+        'a[href*="/mod/"][href*="/view.php"]',
         (as, courseName) =>
           as.map((a) => {
             const clean = (v) => String(v || '').replace(/\\s+/g, ' ').trim();
@@ -372,6 +372,8 @@ async function findQuizzes(page) {
               ariaLabel: clean(a.getAttribute('aria-label')),
               context: clean(parent && parent.innerText).slice(0, 500),
               statusText: clean(parent && parent.innerText).slice(0, 500),
+              activityType: (new URL(a.href)).pathname.match(/\\/mod\\/([^/]+)\\//)?.[1] || 'activity',
+              isQuiz: /\\/mod\\/quiz\\/view\\.php/.test(new URL(a.href).pathname),
               course: courseName
             };
           }).filter((x) => x.name || x.title || x.ariaLabel || x.context),
@@ -383,8 +385,12 @@ async function findQuizzes(page) {
     }
   }
   const seen = new Set();
-  const uniqueQuizzes = quizzes.filter((q) => (seen.has(q.href) ? false : (seen.add(q.href), true)));
-  return { coursesCount: courses.length, quizzes: uniqueQuizzes };
+  const uniqueActivities = quizzes.filter((q) => (seen.has(q.href) ? false : (seen.add(q.href), true)));
+  return {
+    coursesCount: courses.length,
+    quizzes: uniqueActivities.filter((q) => q.isQuiz),
+    activities: uniqueActivities
+  };
 }
 
 async function doTheWork(payload) {
@@ -406,6 +412,7 @@ async function doTheWork(payload) {
     await moodleLogin(page, accountId, password);
     const discovery = await findQuizzes(page);
     const quizzes = discovery.quizzes;
+    const activities = discovery.activities;
     const scannedCourses = discovery.coursesCount;
 
     // Inspection mode is deliberately read-only: never open an attempt,
@@ -415,8 +422,9 @@ async function doTheWork(payload) {
       const normalize = (v) => String(v || '').normalize('NFKD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\\s+/g, ' ');
       const target = normalize(targetRaw);
       const targetTokens = target.split(' ').filter(Boolean);
-      const scored = quizzes.map((q) => {
-        const searchable = normalize([q.name, q.title, q.ariaLabel, q.context, q.course].join(' '));
+      // Search all discovered Moodle activities, not a guessed worksheet title.
+      const scored = activities.map((q) => {
+        const searchable = normalize([q.name, q.title, q.ariaLabel, q.context, q.course, q.activityType].join(' '));
         const tokens = new Set(searchable.split(' ').filter(Boolean));
         const tokenScore = targetTokens.length ? targetTokens.filter((t) => tokens.has(t)).length / targetTokens.length : 0;
         const exact = searchable.includes(target);
@@ -424,20 +432,24 @@ async function doTheWork(payload) {
         return { q, searchable, score: exact ? 1 : tokenScore, matched: exact || allTokens };
       });
       const matches = scored.filter((x) => x.matched).map((x) => x.q);
-      const candidates = [...scored].sort((a, b) => b.score - a.score).slice(0, 8);
+      const candidates = [...scored].sort((a, b) => {
+        const au = /not attempted|not submitted|to do|incomplete|overdue|not completed/i.test(a.q.statusText || '') ? 1 : 0;
+        const bu = /not attempted|not submitted|to do|incomplete|overdue|not completed/i.test(b.q.statusText || '') ? 1 : 0;
+        return bu - au || b.score - a.score;
+      });
       return {
         success: true,
         charge: false,
         mode: 'inspect',
         targetWork: targetRaw,
-        message: matches.length
-          ? 'Found likely matching work: ' + matches.map((q) => (q.name || q.title || q.ariaLabel || 'Untitled quiz') + ' (' + q.course + ')').join(', ') + '. Inspection only: no attempt was started and no answers were changed or submitted.'
-          : quizzes.length
-            ? 'Scanned ' + scannedCourses + ' course link(s) and found ' + quizzes.length + ' quiz link(s). No title matched "' + targetRaw + '". Showing the closest matches for review. No attempt was started.'
-            : 'No work found — please report this to an admin. Scanned ' + scannedCourses + ' course link(s) but found no quiz links. No attempt was started.',
+        message: 'Scanned ' + scannedCourses + ' course link(s), found ' + activities.length + ' Moodle activity link(s), including ' + quizzes.length + ' quiz link(s). Review the activity list below; names do not need to match a preset title. No quiz attempt was started.',
         scannedCourses,
+        activityCount: activities.length,
         quizCount: quizzes.length,
         result: (matches.length ? scored.filter((x) => x.matched) : candidates).map((x) => ({
+          href: x.q.href,
+          activityType: x.q.activityType,
+          isQuiz: x.q.isQuiz,
           name: x.q.name,
           title: x.q.title,
           ariaLabel: x.q.ariaLabel,

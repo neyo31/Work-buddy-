@@ -320,23 +320,28 @@ route('POST', '/api/signup', null, async ({ req, body }) => {
   if (taken) bad(taken.email === v.email ? 'Email already registered.' : 'Account ID already registered.');
   const id = db.prepare('INSERT INTO users(nickname,sid,email,pass_hash,role,verified,tokens,trial_given,created_at,school_pass_enc) VALUES(?,?,?,?,\'user\',0,?,?,?,?)').run(v.nickname, v.sid, v.email, hashPassword(v.password), TRIAL_TOKENS, TRIAL_TOKENS > 0 ? 1 : 0, Date.now(), encodeSchoolPassword(v.schoolPassword)).lastInsertRowid;
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-  const extra = await issueVerification(user);
-  return { ok: true, needVerify: true, ...extra };
+  return { ok: true, needVerify: true, email: user.email, ...(await issueVerification(user)) };
 });
-route('POST', '/api/verify', null, async ({ req, body }) => {
+route('POST', '/api/verify', null, async ({ req, res, body }) => {
   const email = clean(body.email).toLowerCase();
   const code = clean(body.code);
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
-  if (!user) bad('Account not found.');
-  if (user.verified) return { ok: true, already: true };
+  if (!email) bad('Missing email. Go back and sign up again.');
+  if (!code) bad('Enter the 6-digit code.');
+  const user = db.prepare('SELECT * FROM users WHERE email = ? AND role = ?').get(email, 'user');
+  if (!user) bad('Account not found. Sign up again or check the email address.');
+  if (user.verified) {
+    setCookie(res, COOKIE_NAME.user, newSession(user.id, 'user', 2592000000), 2592000);
+    return { user: publicUser(user) };
+  }
   const row = db.prepare('SELECT * FROM verifications WHERE user_id = ?').get(user.id);
-  if (!row || row.expires < Date.now()) bad('Code expired. Request a new one.');
-  if (row.attempts >= 8) bad('Too many tries. Request a new code.');
+  if (!row || row.expires < Date.now()) bad('Code expired. Go back, log in with your password, and a new code will be issued.');
+  if (row.attempts >= 8) bad('Too many tries. Go back and log in to get a new code.');
   db.prepare('UPDATE verifications SET attempts = attempts + 1 WHERE user_id = ?').run(user.id);
-  if (sha(code) !== row.code_hash) bad('Wrong code.');
+  if (sha(code) !== row.code_hash) bad('Wrong code. Use the exact 6 digits shown (or from your email).');
   db.prepare('UPDATE users SET verified = 1 WHERE id = ?').run(user.id);
   db.prepare('DELETE FROM verifications WHERE user_id = ?').run(user.id);
-  return { ok: true };
+  setCookie(res, COOKIE_NAME.user, newSession(user.id, 'user', 2592000000), 2592000);
+  return { user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(user.id)) };
 });
 route('POST', '/api/login', null, async ({ req, res, body }) => {
   limit('login|' + clientIp(req), 30, 600000);
@@ -344,8 +349,8 @@ route('POST', '/api/login', null, async ({ req, res, body }) => {
   const password = String(body.password ?? '');
   const user = db.prepare('SELECT * FROM users WHERE (email = ? OR sid = ? OR lower(nickname) = ?) AND role = ?').get(id, id, id, 'user');
   if (!user || !checkPassword(password, user.pass_hash)) bad('Wrong login details.', 401);
-  if (!user.verified) bad('Verify your email first.', 403);
   if (user.status === 'revoked') bad('Account revoked.', 403);
+  if (!user.verified) return { needVerify: true, email: user.email, ...(await issueVerification(user)) };
   db.prepare('UPDATE users SET last_login = ? WHERE id = ?').run(Date.now(), user.id);
   setCookie(res, COOKIE_NAME.user, newSession(user.id, 'user', 2592000000), 2592000);
   return { user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(user.id)) };

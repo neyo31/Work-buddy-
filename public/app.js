@@ -30,7 +30,6 @@
     document.body.append(t); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.remove(), 3800);
   }
   function field(label, id, props = {}) { return h('div', { class: 'field' }, h('label', { for: id, text: label }), h('input', { class: 'input', id, name: id, ...props })); }
-  function when(ms) { return new Date(ms).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
   function plural(n, word) { return n === 1 ? word : word + 's'; }
   function signedOut() { state.me = null; state.verify = null; closeLayer(); clearInterval(pollTimer); renderAuth(); }
   function renderAuth() {
@@ -88,8 +87,7 @@
   }
   function makeBuddy(mood = 'hello') {
     const wrap = h('div', { class: 'buddy-art buddy-' + mood, 'aria-hidden': 'true' });
-    const svg = '<svg viewBox="0 0 160 190" role="img" aria-label="Blue Work Buddy mascot" xmlns="http://www.w3.org/2000/svg"><ellipse cx="80" cy="178" rx="42" ry="7" fill="#0a5fbd" opacity=".15"/><path d="M80 23V12" stroke="#4c9fff" stroke-width="7" stroke-linecap="round"/><circle cx="80" cy="10" r="7" fill="#a8d8ff" stroke="#2587ef" stroke-width="3"/><rect x="34" y="28" width="92" height="82" rx="26" fill="#2389f2" stroke="#0870d8" stroke-width="4"/><path d="M42 43Q80 16 118 43" fill="none" stroke="#77bdff" stroke-width="5" stroke-linecap="round"/><rect x="48" y="55" width="64" height="36" rx="15" fill="#eaf7ff"/><ellipse cx="66" cy="70" rx="5" ry="7" fill="#12549a"/><ellipse cx="94" cy="70" rx="5" ry="7" fill="#12549a"/><path d="M67 80Q80 91 93 80" fill="none" stroke="#12549a" stroke-width="3.5" stroke-linecap="round"/><path d="M43 113Q80 103 117 113L123 153Q80 167 37 153Z" fill="#2389f2" stroke="#0870d8" stroke-width="4"/><rect x="59" y="119" width="42" height="19" rx="9" fill="#b9e2ff"/><circle cx="80" cy="128" r="5" fill="#0870d8"/><path d="M40 120L23 140" stroke="#2389f2" stroke-width="12" stroke-linecap="round"/><circle cx="20" cy="143" r="10" fill="#a8d8ff" stroke="#0870d8" stroke-width="3"/><path d="M120 120L137 138" stroke="#2389f2" stroke-width="12" stroke-linecap="round"/><circle cx="140" cy="141" r="10" fill="#a8d8ff" stroke="#0870d8" stroke-width="3"/><path d="M58 155L53 170" stroke="#2389f2" stroke-width="12" stroke-linecap="round"/><path d="M102 155L107 170" stroke="#2389f2" stroke-width="12" stroke-linecap="round"/><rect x="40" y="167" width="26" height="12" rx="6" fill="#a8d8ff" stroke="#0870d8" stroke-width="3"/><rect x="94" y="167" width="26" height="12" rx="6" fill="#a8d8ff" stroke="#0870d8" stroke-width="3"/></svg>';
-    wrap.innerHTML = svg;
+    wrap.innerHTML = '<svg viewBox="0 0 160 190" xmlns="http://www.w3.org/2000/svg"><ellipse cx="80" cy="178" rx="42" ry="7" fill="#0a5fbd" opacity=".15"/><path d="M80 23V12" stroke="#4c9fff" stroke-width="7" stroke-linecap="round"/><circle cx="80" cy="10" r="7" fill="#a8d8ff" stroke="#2587ef" stroke-width="3"/><rect x="34" y="28" width="92" height="82" rx="26" fill="#2389f2" stroke="#0870d8" stroke-width="4"/><path d="M42 43Q80 16 118 43" fill="none" stroke="#77bdff" stroke-width="5" stroke-linecap="round"/><rect x="48" y="55" width="64" height="36" rx="15" fill="#eaf7ff"/><ellipse cx="66" cy="70" rx="5" ry="7" fill="#12549a"/><ellipse cx="94" cy="70" rx="5" ry="7" fill="#12549a"/><path d="M67 80Q80 91 93 80" fill="none" stroke="#12549a" stroke-width="3.5" stroke-linecap="round"/><path d="M43 113Q80 103 117 113L123 153Q80 167 37 153Z" fill="#2389f2" stroke="#0870d8" stroke-width="4"/><rect x="59" y="119" width="42" height="19" rx="9" fill="#b9e2ff"/><circle cx="80" cy="128" r="5" fill="#0870d8"/><path d="M40 120L23 140" stroke="#2389f2" stroke-width="12" stroke-linecap="round"/><circle cx="20" cy="143" r="10" fill="#a8d8ff" stroke="#0870d8" stroke-width="3"/><path d="M120 120L137 138" stroke="#2389f2" stroke-width="12" stroke-linecap="round"/><circle cx="140" cy="141" r="10" fill="#a8d8ff" stroke="#0870d8" stroke-width="3"/><path d="M58 155L53 170" stroke="#2389f2" stroke-width="12" stroke-linecap="round"/><path d="M102 155L107 170" stroke="#2389f2" stroke-width="12" stroke-linecap="round"/><rect x="40" y="167" width="26" height="12" rx="6" fill="#a8d8ff" stroke="#0870d8" stroke-width="3"/><rect x="94" y="167" width="26" height="12" rx="6" fill="#a8d8ff" stroke="#0870d8" stroke-width="3"/></svg>';
     return wrap;
   }
   function refreshHome() {
@@ -114,17 +112,11 @@
       home.resultBox.className = 'result ' + (r.ok ? 'good' : 'fail');
       const nodes = [h('strong', { text: noWork ? 'No work to do right now' : r.ok ? 'Done' : 'Needs attention' })];
       const summary = noWork
-        ? (r.message || 'No open worksheets right now. You’re all caught up.')
+        ? (r.message || 'No open worksheets right now. You are all caught up.')
         : r.ok
           ? (r.message || (found ? ('Finished. ' + items.length + ' item(s).') : 'Done.'))
           : (r.message || 'The scan could not finish. Please try again in a moment.');
       nodes.push(h('p', { text: summary }));
-      if (found && items.some((it) => it.ok === true || it.answered != null || it.name)) {
-        const lines = items.filter((it) => it.name).slice(0, 8).map((it) =>
-          (it.ok ? '✓ ' : '• ') + (it.name || '') + (it.answered != null ? (' — ' + it.answered + ' answered') : '')
-        );
-        if (lines.length) nodes.push(h('p', { class: 'muted small', text: lines.join(' · ') }));
-      }
       home.resultBox.replaceChildren(...nodes);
     }
   }
@@ -135,26 +127,23 @@
     if (!r) return;
     state.working = false;
     const items = Array.isArray(r.result) ? r.result : (Array.isArray(r.results) ? r.results : []);
-    const msg = r.message || '';
-    const noWorkMsg = /no open work|no work|no quizzes|caught up|none had an open/i.test(msg);
-    const ok = r.ok === true || r.success === true || noWorkMsg;
-    state.result = {
-      ok: !!ok,
-      message: msg || (ok ? (items.length ? 'Done.' : 'No work to do right now.') : 'Scan finished.'),
-      results: items
-    };
+    let msg = String(r.message || '').trim();
+    if (!msg || /^scan finished\.?$/i.test(msg)) {
+      msg = items.length ? 'Done.' : 'No work to do right now.';
+    }
+    const noWorkMsg = /no open work|no work|no quizzes|caught up|none had an open|all caught up/i.test(msg);
+    let ok = r.ok === true || r.success === true || noWorkMsg;
+    if (!ok && !items.length && /finished|done|complete/i.test(msg) && !/fail|error|could not|timeout|paused|tokens/i.test(msg)) ok = true;
+    if (!ok && noWorkMsg) ok = true;
+    state.result = { ok: !!ok, message: msg, results: items };
     if (typeof r.tokens === 'number' && state.me) state.me.tokens = r.tokens;
     refreshHome();
   }
   async function restoreRunStatus() {
     try {
       const r = await api('/api/run-status');
-      if (r.status === 'running') {
-        state.working = true; refreshHome();
-        watchRunStatus();
-      } else if (r.status === 'done') {
-        showRunResult(r);
-      }
+      if (r.status === 'running') { state.working = true; refreshHome(); watchRunStatus(); }
+      else if (r.status === 'done') showRunResult(r);
     } catch (e) { if (e.status === 401) signedOut(); }
   }
   async function watchRunStatus() {
@@ -216,7 +205,7 @@
         h('button', { class: 'btn block', type: 'button', text: 'Sign out', onclick: async () => { try { await api('/api/logout', 'POST'); } catch {} signedOut(); } }))));
   }
   function sheet(title, ...sections) {
-    const el = h('div', { class: 'sheet', role: 'dialog' }, h('div', { class: 'sheet-head' }, h('h2', { text: title }), h('button', { class: 'close', type: 'button', text: '×', onclick: closeLayer })), ...sections);
+    const el = h('div', { class: 'sheet', role: 'dialog' }, h('div', { class: 'sheet-head' }, h('h2', { text: title }), h('button', { class: 'close', type: 'button', text: 'x', onclick: closeLayer })), ...sections);
     mountLayer(h('div', { class: 'scrim', onclick: closeLayer }), el); return el;
   }
   function openSchoolEdit() {
@@ -226,10 +215,10 @@
       try { const r = await api('/api/school', 'POST', { schoolPassword: pw.value }); state.me = r.user; refreshHome(); toast('School login updated.'); closeLayer(); }
       catch (e) { toast(e.message, true); } finally { save.disabled = false; }
     } });
-    sheet('Edit school login', h('p', { class: 'muted small', text: 'Updates the Moodle password Work Buddy uses. Edits are limited.' }), pw, h('div', { class: 'actions' }, save));
+    sheet('Edit school login', h('p', { class: 'muted small', text: 'Updates the Moodle password Work Buddy uses.' }), pw, h('div', { class: 'actions' }, save));
   }
   function openIssue() {
-    const text = h('textarea', { class: 'input', rows: '4', placeholder: 'Describe the issue…' });
+    const text = h('textarea', { class: 'input', rows: '4', placeholder: 'Describe the issue...' });
     const send = h('button', { class: 'btn', type: 'button', text: 'Send', onclick: async () => { send.disabled = true; try { await api('/api/messages', 'POST', { type: 'issue', body: text.value }); text.value = ''; toast('Sent.'); closeLayer(); } catch (e) { toast(e.message, true); } finally { send.disabled = false; } } });
     sheet('Report an issue', text, h('div', { class: 'actions' }, send));
   }
@@ -245,7 +234,7 @@
       const cfg = await api('/api/config');
       state.config = { buyUrl: cfg.buyUrl || '', costPerRun: cfg.costPerRun || 1 };
       try { state.me = (await api('/api/me')).user; renderHome(); }
-      catch (e) { if (e.status === 401) renderAuth(); else renderAuth(); }
+      catch (e) { renderAuth(); }
     } catch { renderAuth(); }
   })();
 })();

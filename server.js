@@ -27,7 +27,7 @@ const TRUST_PROXY = env('TRUST_PROXY', ON_RENDER ? 'true' : 'false') === 'true';
 const ENV_BUY_URL = env('BUY_URL');
 const ENV_BOT_URL = env('BOT_WEBHOOK_URL');
 const BOT_KEY = env('BOT_API_KEY');
-const BOT_TIMEOUT = Number(env('BOT_TIMEOUT_MS', '300000'));
+const BOT_TIMEOUT = Math.max(900000, Number(env('BOT_TIMEOUT_MS', '900000')) || 900000);
 const COST = Math.max(1, Number(env('COST_PER_RUN', '1')));
 const TRIAL_TOKENS = Math.max(0, Number(env('TRIAL_TOKENS', '1')));
 const RESEND_KEY = env('RESEND_API_KEY');

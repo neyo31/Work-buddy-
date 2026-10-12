@@ -209,13 +209,26 @@ async function callBot(u, trigger, options = {}) {
     if (options.targetHref) payload.targetHref = options.targetHref;
     if (options.targetName) payload.targetName = options.targetName;
     if (options.targetCourse) payload.targetCourse = options.targetCourse;
-    const res = await fetch(botUrl, { method: 'POST', headers, body: JSON.stringify(payload), signal: ctrl.signal });
+    const requestBody = JSON.stringify(payload);
+    let res;
     let data = {};
-    try { data = await res.json(); } catch {}
+    // Render's free web services can briefly return gateway errors while waking.
+    // Retry only transient gateway failures; the bot rejects overlapping jobs.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      res = await fetch(botUrl, { method: 'POST', headers, body: requestBody, signal: ctrl.signal });
+      data = {};
+      try { data = await res.json(); } catch {}
+      if (res.ok || ![502, 503, 504].includes(res.status) || attempt === 2) break;
+      await sleep(1500 * (attempt + 1));
+      // Give a waking service a chance to become healthy before retrying the request.
+      try {
+        await fetch(new URL('/health', botUrl), { signal: ctrl.signal });
+      } catch (_) {}
+    }
     if (!res.ok) {
       const transient = [502, 503, 504].includes(res.status);
       return { success: false, charge: false, message: data.message || (transient
-        ? `The bot service is temporarily unavailable (HTTP ${res.status}). No tokens were charged. Wait a few seconds and try again.`
+        ? `The bot service is temporarily unavailable (HTTP ${res.status}). No tokens were charged. Please try again shortly.`
         : `Bot error (${res.status}).`) };
     }
     if (data.accepted && data.jobId) {

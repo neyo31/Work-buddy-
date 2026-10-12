@@ -129,12 +129,16 @@
     const items = Array.isArray(r.result) ? r.result : (Array.isArray(r.results) ? r.results : []);
     let msg = String(r.message || '').trim();
     if (!msg || /^scan finished\.?$/i.test(msg)) {
-      msg = items.length ? 'Done.' : 'No work to do right now.';
+      msg = items.length ? 'Done.' : 'The scan ended without a detailed status message.';
     }
+    const inspectionOnly = /no attempt was started or submitted/i.test(msg);
+    const browserClosed = /browser session closed|target closed|session closed|connection closed|navigating frame was detached/i.test(msg);
     const noWorkMsg = /no open work|no work|no quizzes|caught up|none had an open|all caught up/i.test(msg);
     let ok = r.ok === true || r.success === true || noWorkMsg;
-    if (!ok && !items.length && /finished|done|complete/i.test(msg) && !/fail|error|could not|timeout|paused|tokens/i.test(msg)) ok = true;
+    if (!ok && !items.length && /finished|done|complete/i.test(msg) && !/fail|error|could not|timeout|paused|tokens|closed/i.test(msg)) ok = true;
     if (!ok && noWorkMsg) ok = true;
+    if (inspectionOnly) msg += ' Auto-work is currently off, so this was a read-only scan.';
+    if (browserClosed && !/Please try again/i.test(msg)) msg = 'The browser session closed during the scan. No work was submitted. Please try again; if it repeats, report this message to the administrator.';
     state.result = { ok: !!ok, message: msg, results: items };
     if (typeof r.tokens === 'number' && state.me) state.me.tokens = r.tokens;
     refreshHome();

@@ -35,7 +35,7 @@
     return data;
   }
   function escapeHtml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' }[c]));
   }
   function renderPacks() {
     packsEl.replaceChildren(...PACKS.map((p) => {
@@ -92,7 +92,7 @@
   async function verifyShot(pack, file, zone, uploadBox) {
     if (file.size > 4000000) return toast('Image too large (max 4MB)', true);
     uploadBox.hidden = true;
-    const buddy = window.BUDDY_SRC || '/shop/buddy.png';
+    const buddy = window.BUDDY_SRC || '/shop/buddy.svg';
     zone.innerHTML = '<div class="analyzing"><img src="' + buddy + '" alt="Buddy thinking"><div class="dots">Buddy is checking your payment…</div><div class="loader"><i></i></div><p class="steps">Looking at amount, number, and receipt details</p></div>';
     const b64 = await new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result || '')); r.onerror = reject; r.readAsDataURL(file); });
     try {

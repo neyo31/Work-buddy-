@@ -308,3 +308,21 @@ main { max-width: 960px; margin: 0 auto; padding: 8px 16px 48px; }
   border-width: 2px;
 }
 .upload strong { font-size: 15px; }
+
+/* Report a problem */
+.report-box { margin-top: 8px; }
+.report-toggle {
+  width: 100%;
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--muted);
+  padding: 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+}
+.report-toggle:hover { border-color: var(--sky); color: var(--text); }
+.report-form { margin-top: 10px; display: grid; gap: 8px; }
+.report-input { width: 100%; }
+textarea.report-input { resize: vertical; min-height: 72px; }

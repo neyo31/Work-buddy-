@@ -196,8 +196,32 @@ async function fetchBotJobStatus(jobUrl, headers, signal) {
   }
   return { poll: { ok: false, status: 502 }, job: {} };
 }
+
+let lastUserActivity = 0;
+const ACTIVITY_WINDOW_MS = 60 * 60 * 1000;
+function noteUserActivity() { lastUserActivity = Date.now(); }
+async function wakeBot(maxTries = 8) {
+  const botUrl = BOT_URL();
+  if (!botUrl) return false;
+  let health;
+  try { health = new URL('/health', botUrl).href; } catch { return false; }
+  for (let i = 0; i < maxTries; i++) {
+    try {
+      const r = await fetch(health, { signal: AbortSignal.timeout(45000) });
+      if (r.ok) { noteUserActivity(); return true; }
+    } catch (_) {}
+    await sleep(2500 + i * 1500);
+  }
+  return false;
+}
+
 async function callBot(u, trigger, options = {}) {
   if (!BOT_URL()) { await sleep(1500); return { success: false, charge: false, message: 'No bot is connected. Configure the bot URL in the admin panel.' }; }
+  noteUserActivity();
+  const awake = await wakeBot(8);
+  if (!awake) {
+    return { success: false, charge: false, message: 'The bot is waking up from sleep. Wait about 30 seconds and try again. No tokens were charged.' };
+  }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), BOT_TIMEOUT);
   try {
@@ -212,12 +236,12 @@ async function callBot(u, trigger, options = {}) {
     const requestBody = JSON.stringify(payload);
     let res;
     let data = {};
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       res = await fetch(botUrl, { method: 'POST', headers, body: requestBody, signal: ctrl.signal });
       data = {};
       try { data = await res.json(); } catch {}
-      if (res.ok || ![502, 503, 504].includes(res.status) || attempt === 2) break;
-      await sleep(1500 * (attempt + 1));
+      if (res.ok || ![502, 503, 504].includes(res.status) || attempt === 4) break;
+      await sleep(2000 * (attempt + 1));
       try { await fetch(new URL('/health', botUrl), { signal: ctrl.signal }); } catch (_) {}
     }
     if (!res.ok) {
@@ -257,8 +281,8 @@ async function executeRun(userId, trigger, options = {}) {
     const items = Array.isArray(r.result) ? r.result : [];
     let msg = String(r.message || '').trim();
     let ok = r.success === true;
-    if (!ok && /no open work|no work right now|no quizzes were found|caught up|none had an open|could not complete any quiz|no open attempt|no questions answered/i.test(msg)) {
-      ok = true;
+    if (!ok && /no open work|no work right now|no quizzes were found|caught up|none had an open|could not complete any quiz|no open attempt|no questions answered|waking up from sleep/i.test(msg)) {
+      ok = /waking up from sleep/i.test(msg) ? false : true;
       if (/could not complete any quiz/i.test(msg)) {
         msg = 'No open work right now. Quizzes were found, but none had an open attempt. (No token used.)';
       }
@@ -380,6 +404,8 @@ route('GET', '/api/config', null, () => ({ buyUrl: BUY_URL() || '/shop/', costPe
 
 route('POST', '/api/start', 'user', ({ user }) => {
   limit('start|' + user.id, 8, 60000);
+  noteUserActivity();
+  wakeBot(6).catch(() => {});
   if (!user.school_pass_enc || !decodeSchoolPassword(user.school_pass_enc)) bad('School login details are missing or need to be updated.', 400);
   const current = runRecords.get(user.id);
   if (current && current.status === 'running') {
@@ -602,9 +628,16 @@ const BOT_KEEP_URL = () => {
 async function keepBotAwake() {
   const h = BOT_KEEP_URL();
   if (!h) return;
-  try { await fetch(h, { signal: AbortSignal.timeout(20000) }); } catch (_) {}
+  try { await fetch(h, { signal: AbortSignal.timeout(25000) }); } catch (_) {}
+  try {
+    const self = process.env.RENDER_EXTERNAL_URL;
+    if (self) await fetch(String(self).replace(/\/$/, '') + '/health', { signal: AbortSignal.timeout(15000) });
+  } catch (_) {}
 }
-setInterval(keepBotAwake, 4 * 60 * 1000);
-setTimeout(keepBotAwake, 10000);
+setInterval(keepBotAwake, 2 * 60 * 1000);
+setTimeout(keepBotAwake, 5000);
+setInterval(() => {
+  if (Date.now() - lastUserActivity < ACTIVITY_WINDOW_MS) keepBotAwake().catch(() => {});
+}, 45 * 1000);
 
 server.listen(PORT, () => console.log('Work Buddy server on', PORT, 'bot:', !!BOT_URL(), 'auto_work:', AUTO_WORK()));

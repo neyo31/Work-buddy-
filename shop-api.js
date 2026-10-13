@@ -6,6 +6,20 @@ module.exports = function registerShop(ctx) {
   const GEMINI_KEY = env('GEMINI_API_KEY');
   try { db.exec('CREATE TABLE IF NOT EXISTS payment_claims (id INTEGER PRIMARY KEY AUTOINCREMENT, package_id TEXT, amount REAL, currency TEXT, tokens INTEGER, ok INTEGER NOT NULL DEFAULT 0, note TEXT, codes_json TEXT, created_at INTEGER NOT NULL)'); } catch (e) {}
   try { db.exec('ALTER TABLE codes ADD COLUMN distributed_at INTEGER'); } catch (e) {}
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS shop_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      package_id TEXT,
+      amount REAL,
+      currency TEXT,
+      tokens INTEGER,
+      contact TEXT,
+      message TEXT NOT NULL,
+      screenshot TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at INTEGER NOT NULL
+    )`);
+  } catch (e) {}
 
   route('GET', '/api/shop/info', null, () => {
     const unused = db.prepare('SELECT COUNT(*) AS c FROM codes WHERE used_at IS NULL AND distributed_at IS NULL').get().c;
@@ -49,6 +63,44 @@ module.exports = function registerShop(ctx) {
   route('GET', '/api/shop/admin/claims', 'admin', () => ({
     claims: db.prepare('SELECT id, package_id AS packageId, amount, currency, tokens, ok, note, created_at AS createdAt FROM payment_claims ORDER BY id DESC LIMIT 50').all(),
   }));
+
+  route('POST', '/api/shop/report', null, async ({ req, body }) => {
+    limit('shop-report|' + clientIp(req), 6, 600000);
+    const message = clean(body.message);
+    if (!message || message.length < 5) bad('Please describe the problem (at least a few words).');
+    if (message.length > 2000) bad('Message too long.');
+    const contact = clean(body.contact).slice(0, 200);
+    const packageId = clean(body.packageId).slice(0, 40);
+    const amount = Number(body.amount) || 0;
+    const currency = clean(body.currency) || 'ETB';
+    const tokens = Math.max(0, Math.min(100, Number(body.tokens) || 0));
+    let screenshot = String(body.screenshot || '');
+    if (screenshot && !screenshot.startsWith('data:image/')) screenshot = '';
+    if (screenshot.length > 6000000) screenshot = '';
+    db.prepare(
+      'INSERT INTO shop_reports(package_id,amount,currency,tokens,contact,message,screenshot,status,created_at) VALUES(?,?,?,?,?,?,?,?,?)'
+    ).run(packageId, amount, currency, tokens, contact, message, screenshot || null, 'open', Date.now());
+    return { ok: true, message: 'Report sent. Admin will review and help you.' };
+  });
+
+  route('GET', '/api/shop/admin/reports', 'admin', () => ({
+    reports: db.prepare(
+      `SELECT id, package_id AS packageId, amount, currency, tokens, contact, message,
+              CASE WHEN screenshot IS NOT NULL AND screenshot != '' THEN 1 ELSE 0 END AS hasShot,
+              status, created_at AS createdAt
+       FROM shop_reports ORDER BY id DESC LIMIT 80`
+    ).all(),
+  }));
+
+  route('POST', '/api/shop/admin/reports/status', 'admin', ({ body }) => {
+    const id = Number(body.id);
+    const status = clean(body.status) || 'open';
+    if (!id) bad('Invalid report.');
+    if (!['open', 'done', 'ignored'].includes(status)) bad('Bad status.');
+    const r = db.prepare('UPDATE shop_reports SET status = ? WHERE id = ?').run(status, id);
+    if (!r.changes) bad('Report not found.');
+    return { ok: true };
+  });
 
   async function analyzePaymentScreenshot(dataUrl, expectedAmount, expectedPhone) {
     if (!GEMINI_KEY) {

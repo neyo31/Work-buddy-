@@ -25,7 +25,6 @@
   }
   function showDash(on) { loginCard.hidden = on; dash.hidden = !on; }
   async function boot() {
-    // Always show login — never auto-open the panel from an old cookie
     showDash(false);
     try { await api('/api/admin/logout', 'POST'); } catch {}
   }
@@ -76,6 +75,7 @@
     } catch (e) { toast(e.message, true); }
   });
   $('refreshCodes').addEventListener('click', () => loadCodes());
+  $('refreshReports').addEventListener('click', () => loadReports());
   async function loadPay() {
     const r = await api('/api/shop/admin/payment');
     $('phone').value = r.phone || '';
@@ -130,8 +130,38 @@
       $('claimRows').innerHTML = '<tr><td colspan="4">—</td></tr>';
     }
   }
+  async function loadReports() {
+    try {
+      const r = await api('/api/shop/admin/reports');
+      const rows = r.reports || [];
+      $('reportRows').innerHTML = rows.map((c) => {
+        const when = c.createdAt ? new Date(c.createdAt).toLocaleString() : '—';
+        const pack = (c.packageId || '—') + (c.amount ? (' · ' + c.amount + ' ' + (c.currency || '')) : '');
+        const msg = String(c.message || '').slice(0, 120).replace(/</g, '<');
+        const contact = String(c.contact || '—').slice(0, 40).replace(/</g, '<');
+        const shot = c.hasShot ? ' 📷' : '';
+        return '<tr><td style="white-space:nowrap;font-size:12px">' + when + '</td><td>' + pack + shot +
+          '</td><td>' + contact + '</td><td style="max-width:200px">' + msg +
+          '</td><td><select data-rid="' + c.id + '" class="input report-status" style="padding:4px 6px;width:auto">' +
+          '<option value="open"' + (c.status === 'open' ? ' selected' : '') + '>Open</option>' +
+          '<option value="done"' + (c.status === 'done' ? ' selected' : '') + '>Done</option>' +
+          '<option value="ignored"' + (c.status === 'ignored' ? ' selected' : '') + '>Ignored</option>' +
+          '</select></td></tr>';
+      }).join('') || '<tr><td colspan="5">No reports yet</td></tr>';
+      $('reportRows').querySelectorAll('.report-status').forEach((sel) => {
+        sel.addEventListener('change', async () => {
+          try {
+            await api('/api/shop/admin/reports/status', 'POST', { id: Number(sel.getAttribute('data-rid')), status: sel.value });
+            toast('Status updated');
+          } catch (e) { toast(e.message, true); }
+        });
+      });
+    } catch (e) {
+      $('reportRows').innerHTML = '<tr><td colspan="5">' + (e.message || '—') + '</td></tr>';
+    }
+  }
   async function refreshAll() {
-    await Promise.all([loadPay(), loadStock(), loadCodes(), loadClaims()]);
+    await Promise.all([loadPay(), loadStock(), loadCodes(), loadClaims(), loadReports()]);
   }
   boot();
 })();

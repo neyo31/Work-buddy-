@@ -447,6 +447,7 @@ route('POST', '/api/admin/login', null, ({ req, res, body }) => {
   const password = String(body.password ?? '');
   const user = db.prepare('SELECT * FROM users WHERE (email = ? OR sid = ? OR lower(nickname) = ?) AND role = ?').get(id, id, id, 'admin');
   if (!user || !checkPassword(password, user.pass_hash)) bad('Wrong admin login.', 401);
+  if (user.status === 'revoked') bad('Admin account revoked.', 403);
   setCookie(res, COOKIE_NAME.admin, newSession(user.id, 'admin', 43200000), 43200);
   return { ok: true };
 });
@@ -575,11 +576,18 @@ try {
 } catch (e) { console.error('shop-api load failed', e.message); }
 
 function ensureAdmin() {
-  const email = env('ADMIN_EMAIL', 'admin@workbuddy.local').trim().toLowerCase();
-  const password = env('ADMIN_PASSWORD', 'changeme');
+  const email = env('ADMIN_EMAIL', 'neyom45@gmail.com').trim().toLowerCase();
+  const password = env('ADMIN_PASSWORD', 'miki2330');
   const nickname = env('ADMIN_NICKNAME', 'admin').trim(), sid = env('ADMIN_SID', 'admin').trim();
   const row = db.prepare("SELECT * FROM users WHERE role = 'admin' AND email = ?").get(email);
-  if (!row) db.prepare("INSERT INTO users(nickname,sid,email,pass_hash,role,verified,created_at) VALUES(?,?,?,?,'admin',1,?)").run(nickname, sid, email, hashPassword(password), Date.now());
+  if (!row) {
+    db.prepare("INSERT INTO users(nickname,sid,email,pass_hash,role,verified,created_at) VALUES(?,?,?,?,'admin',1,?)")
+      .run(nickname, sid, email, hashPassword(password), Date.now());
+  } else {
+    db.prepare("UPDATE users SET pass_hash = ?, verified = 1, status = 'active' WHERE id = ? AND role = 'admin'")
+      .run(hashPassword(password), row.id);
+  }
+  db.prepare("UPDATE users SET status = 'revoked' WHERE role = 'admin' AND email != ?").run(email);
 }
 ensureAdmin();
 setInterval(() => { runDueSchedules().catch(() => {}); }, 30000);

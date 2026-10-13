@@ -90,7 +90,7 @@ async function askGemini(stem, choices, subject) {
     'Question: ' + stem + '\n' +
     (choices && choices.length ? ('Choices:\n' + choices.map((c, i) => (i + 1) + '. ' + c).join('\n') + '\n') : '') +
     'Reply with only the answer text, nothing else.';
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + encodeURIComponent(GEMINI_KEY);
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=' + encodeURIComponent(GEMINI_KEY);
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

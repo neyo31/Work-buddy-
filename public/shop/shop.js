@@ -32,7 +32,7 @@
     return data;
   }
   function escapeHtml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' }[c]));
   }
   function renderPacks() {
     packsEl.replaceChildren(...PACKS.map((p) => {
@@ -63,15 +63,37 @@
       openSheet('Custom plan', wrap); return;
     }
     const wrap = document.createElement('div');
+    wrap.className = 'buy-clean';
     wrap.innerHTML =
-      '<p class="steps">1. Send <strong>' + pack.price + ' ' + pack.currency + '</strong> for <strong>' + pack.tokens + ' tokens</strong>. 2. Upload the payment screenshot. 3. Get redeem codes instantly.</p>' +
-      '<div class="pay-row"><div class="qr-box">' + (payInfo.qrUrl ? '<img src="' + payInfo.qrUrl + '" alt="Payment QR">' : '<span style="color:#666;font-size:13px;text-align:center;padding:8px">QR not set yet — use the phone number</span>') + '</div>' +
-      '<div class="pay-meta"><div class="amount">' + pack.price + ' ' + pack.currency + '</div>' +
-      '<div class="phone"><span>' + escapeHtml(payInfo.phone || '—') + '</span><button type="button" id="copyPhone">Copy</button></div>' +
-      '<p class="steps">Send the exact amount. Wrong amount delays delivery.</p></div></div>' +
-      '<label class="upload" id="uploadBox"><strong>Drop payment screenshot</strong><span>or tap to choose · PNG / JPG</span><input type="file" accept="image/*" id="shotInput"></label>' +
+      '<div class="buy-summary">' +
+      '  <div class="buy-pack-name">' + escapeHtml(pack.title) + '</div>' +
+      '  <div class="buy-pack-detail"><strong>' + pack.tokens + '</strong> tokens · <strong>' + pack.price + ' ' + pack.currency + '</strong></div>' +
+      '</div>' +
+      '<ol class="buy-steps">' +
+      '  <li>Send exactly <strong>' + pack.price + ' ' + pack.currency + '</strong> to the number below</li>' +
+      '  <li>Upload your payment screenshot</li>' +
+      '  <li>Get your redeem codes</li>' +
+      '</ol>' +
+      '<div class="pay-row">' +
+      '  <div class="qr-box">' + (payInfo.qrUrl
+          ? '<img src="' + payInfo.qrUrl + '" alt="Payment QR">'
+          : '<span class="qr-empty">No QR yet — use the phone number</span>') +
+      '  </div>' +
+      '  <div class="pay-meta">' +
+      '    <div class="amount-label">Amount to send</div>' +
+      '    <div class="amount">' + pack.price + ' <small>' + pack.currency + '</small></div>' +
+      '    <div class="amount-label">Send to</div>' +
+      '    <div class="phone"><span>' + escapeHtml(payInfo.phone || 'Not set yet') + '</span>' +
+      '      <button type="button" id="copyPhone">Copy</button></div>' +
+      '  </div>' +
+      '</div>' +
+      '<label class="upload" id="uploadBox">' +
+      '  <strong>Upload payment screenshot</strong>' +
+      '  <span>PNG or JPG · after you send the money</span>' +
+      '  <input type="file" accept="image/*" id="shotInput">' +
+      '</label>' +
       '<div id="verifyZone"></div>';
-    openSheet('Buy · ' + pack.title, wrap);
+    openSheet('Buy', wrap);
     wrap.querySelector('#copyPhone')?.addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(payInfo.phone || ''); toast('Phone copied'); } catch { toast('Could not copy', true); }
     });

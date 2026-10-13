@@ -330,12 +330,12 @@ async function runOneQuiz(page, href, subject) {
   await sleep(800);
   const stats = await answerQuizPages(page, subject);
   if (stats.answered === 0) {
-    return { ok: false, message: 'No questions answered on this quiz.', answered: 0, pages: stats.pages };
+    return { ok: false, noWork: true, message: 'No open attempt or no questions on this quiz.', answered: 0, pages: stats.pages };
   }
   try {
     const finalCheck = await countAnsweredOnPage(page);
     if (finalCheck.total > 0 && finalCheck.answered === 0) {
-      return { ok: false, message: 'Questions still blank — not submitting empty attempt.', answered: 0, pages: stats.pages };
+      return { ok: false, noWork: true, message: 'Questions still blank - not submitting empty attempt.', answered: 0, pages: stats.pages };
     }
   } catch (_) {}
   await finishAndSubmit(page);
@@ -492,13 +492,19 @@ async function doTheWork(payload) {
       }
     }
 
-    const allNoWork = results.length > 0 && results.every((r) => r.noWork || /no open|no questions|finished|no attempts/i.test(String(r.message || '')));
+    const softNoWork = (r) => {
+      const m = String(r.message || '');
+      if (r.noWork === true) return true;
+      return /no open|no questions|no attempt|blank|finished|no attempts|locked|not available|already submitted|time is over|no longer available|closed for|not open/i.test(m);
+    };
+    const hardFail = (r) => /login failed|school login|GEMINI_API_KEY|missing school|Target closed|Protocol error|Session closed|Browser\.close|timeout|could not reach/i.test(String(r.message || ''));
+    const anyHard = results.some(hardFail);
     if (!anyOk) {
-      if (allNoWork) {
+      if (!anyHard && results.length > 0) {
         return {
           success: true,
           charge: false,
-          message: 'No open work right now. Quizzes were found, but none had an open attempt. (No token used.)',
+          message: 'No open work right now. Quizzes were found, but none had an open attempt to complete. (No token used.)',
           result: results,
         };
       }
@@ -612,7 +618,6 @@ server.listen(PORT, () => {
   console.log('Work Buddy bot on', PORT, 'gemini:', !!GEMINI_KEY, 'school:', SCHOOL_URL.slice(0, 40));
 });
 
-// Keep-alive: free Render sleeps ~15 min idle. Ping self often enough to stay warm.
 const SELF_URL = process.env.RENDER_EXTERNAL_URL || process.env.BOT_PUBLIC_URL || '';
 const WEB_URL = (process.env.WEB_URL || 'https://work-buddy-1.onrender.com').replace(/\/$/, '');
 async function keepAlive() {

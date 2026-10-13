@@ -82,6 +82,47 @@ async function moodleLogin(page, accountId, password) {
   }
 }
 
+const GEMINI_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-flash-latest',
+  'gemini-2.0-flash',
+];
+
+function isBusyError(status, msg) {
+  const m = String(msg || '').toLowerCase();
+  return status === 429 || status === 503 || status === 500
+    || m.includes('high demand') || m.includes('resource exhausted')
+    || m.includes('unavailable') || m.includes('try again')
+    || m.includes('overloaded') || m.includes('quota');
+}
+
+async function geminiRequest(body, maxAttempts) {
+  let lastErr = 'AI busy';
+  const attempts = maxAttempts || 6;
+  for (let i = 0; i < attempts; i++) {
+    const model = GEMINI_MODELS[i % GEMINI_MODELS.length];
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + encodeURIComponent(GEMINI_KEY);
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) return data;
+      const msg = (data.error && data.error.message) || ('HTTP ' + r.status);
+      lastErr = msg;
+      if (!isBusyError(r.status, msg) && r.status !== 404) break;
+    } catch (e) {
+      lastErr = e.message || 'network error';
+    }
+    await new Promise((res) => setTimeout(res, 800 + i * 700));
+  }
+  throw new Error(lastErr);
+}
+
 async function askGemini(stem, choices, subject) {
   if (!GEMINI_KEY) throw new Error('GEMINI_API_KEY is not set on the bot service.');
   const prompt =
@@ -90,19 +131,10 @@ async function askGemini(stem, choices, subject) {
     'Question: ' + stem + '\n' +
     (choices && choices.length ? ('Choices:\n' + choices.map((c, i) => (i + 1) + '. ' + c).join('\n') + '\n') : '') +
     'Reply with only the answer text, nothing else.';
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=' + encodeURIComponent(GEMINI_KEY);
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 256 },
-    }),
-  });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) {
-    throw new Error('Gemini error ' + r.status + ': ' + (data.error?.message || 'failed'));
-  }
+  const data = await geminiRequest({
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.1, maxOutputTokens: 256 },
+  }, 6);
   const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '';
   return String(text || '').trim();
 }

@@ -25,9 +25,12 @@
   }
   function showDash(on) { loginCard.hidden = on; dash.hidden = !on; }
   async function boot() {
-    try { await api('/api/admin/check'); showDash(true); await refreshAll(); }
-    catch { showDash(false); }
+    // Always show login — never auto-open the panel from an old cookie
+    showDash(false);
+    try { await api('/api/admin/logout', 'POST'); } catch {}
   }
+  $('pw').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('loginBtn').click(); });
+  $('id').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('pw').focus(); });
   $('loginBtn').addEventListener('click', async () => {
     try {
       await api('/api/admin/login', 'POST', { identifier: $('id').value, password: $('pw').value });

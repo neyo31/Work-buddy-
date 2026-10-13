@@ -68,7 +68,7 @@
         tokens: Number($('addTokens').value) || 2,
       });
       $('newCodes').innerHTML = (r.codes || []).map((c) => '<div class="code"><span>' + c + '</span></div>').join('');
-      toast((r.codes || []).length + ' codes added to stock');
+      toast((r.codes || []).length + ' real Work Buddy vouchers added');
       await loadStock(); await loadCodes();
     } catch (e) { toast(e.message, true); }
   });
@@ -87,8 +87,8 @@
     const unused = r.unusedCodes || 0;
     const cap = r.capacity || 200;
     const pct = Math.min(100, Math.round((unused / Math.max(1, cap)) * 100));
-    $('stockText').textContent = unused + ' unused codes in stock';
-    $('stockPct').textContent = pct + '% of soft capacity';
+    $('stockText').textContent = unused + ' real vouchers left (not yet given out)';
+    $('stockPct').textContent = pct < 20 ? 'Refill soon' : (pct + '% of soft target');
     $('stockBar').style.width = pct + '%';
   }
   async function loadCodes() {

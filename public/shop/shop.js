@@ -13,10 +13,7 @@
   const sheetRoot = document.getElementById('sheetRoot');
   const sheetTitle = document.getElementById('sheetTitle');
   const sheetBody = document.getElementById('sheetBody');
-  const stockBar = document.getElementById('stockBar');
-  const stockLabel = document.getElementById('stockLabel');
   let payInfo = { phone: '', qrUrl: '', contact: '' };
-  let stock = { unused: 0, capacity: 200 };
 
   function toast(text, isError) {
     document.querySelectorAll('.toast').forEach((t) => t.remove());
@@ -35,7 +32,7 @@
     return data;
   }
   function escapeHtml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' }[c]));
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
   function renderPacks() {
     packsEl.replaceChildren(...PACKS.map((p) => {
@@ -50,11 +47,6 @@
       el.querySelector('.buy').addEventListener('click', () => openBuy(p));
       return el;
     }));
-  }
-  function renderStock() {
-    const pct = Math.min(100, Math.round((stock.unused / Math.max(1, stock.capacity)) * 100));
-    stockBar.style.width = pct + '%';
-    stockLabel.textContent = stock.unused + ' codes ready';
   }
   function closeSheet() { sheetRoot.hidden = true; document.body.style.overflow = ''; }
   function openSheet(title, node) {
@@ -104,7 +96,6 @@
         zone.querySelectorAll('[data-code]').forEach((btn) => btn.addEventListener('click', async () => {
           try { await navigator.clipboard.writeText(btn.getAttribute('data-code')); toast('Code copied'); } catch { toast('Copy failed', true); }
         }));
-        loadStock();
       } else {
         zone.innerHTML = '<div class="result-fail"><strong>Could not verify</strong><p class="steps">' + escapeHtml(r.message || 'Try a clearer screenshot.') + '</p><button type="button" class="btn primary block" id="retryShot" style="margin-top:12px">Try another photo</button></div>';
         zone.querySelector('#retryShot')?.addEventListener('click', () => { uploadBox.hidden = false; zone.replaceChildren(); });
@@ -119,15 +110,6 @@
     try {
       const r = await api('/api/shop/info');
       payInfo = { phone: r.phone || '', qrUrl: r.qrUrl || '', contact: r.contact || '' };
-      stock = { unused: r.unusedCodes || 0, capacity: r.capacity || 200 };
-      renderStock();
-    } catch { stockLabel.textContent = 'Stock unknown'; }
-  }
-  async function loadStock() {
-    try {
-      const r = await api('/api/shop/info');
-      stock = { unused: r.unusedCodes || 0, capacity: r.capacity || 200 };
-      renderStock();
     } catch {}
   }
   renderPacks();

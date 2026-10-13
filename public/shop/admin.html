@@ -18,12 +18,13 @@
       <div class="field"><label for="id">Email or ID</label><input class="input" id="id" autocomplete="username"></div>
       <div class="field"><label for="pw">Password</label><input class="input" id="pw" type="password" autocomplete="current-password"></div>
       <button class="btn primary block" type="button" id="loginBtn">Log in</button>
-      <p class="hint" style="margin-top:10px">Same admin account as the main Work Buddy panel.</p>
+      <p class="hint" style="margin-top:10px">Shop admin only — use the account set by the owner.</p>
     </div>
 
     <div id="dash" hidden>
       <div class="admin-card">
-        <h2>Token stock</h2>
+        <h2>Voucher stock (admin only)</h2>
+        <p class="hint" style="margin-bottom:10px">Real Work Buddy redeem codes still available. When this runs low, refill below so buyers can get codes after payment.</p>
         <div class="stock-head"><strong id="stockText">—</strong><span id="stockPct"></span></div>
         <div class="bar"><i id="stockBar"></i></div>
       </div>
@@ -38,13 +39,13 @@
       </div>
 
       <div class="admin-card">
-        <h2>Add tokens to stock</h2>
-        <p class="hint" style="margin-bottom:10px">Generate unused redeem codes. Shop delivers them after a verified payment.</p>
+        <h2>Refill voucher stock</h2>
+        <p class="hint" style="margin-bottom:10px">Creates real Work Buddy codes (same as the main app). Buyers receive them after a verified payment, then redeem under Add tokens.</p>
         <div class="row">
           <div class="field" style="flex:1"><label for="addCount">How many codes</label><input class="input" id="addCount" type="number" min="1" max="100" value="10"></div>
           <div class="field" style="flex:1"><label for="addTokens">Tokens per code</label><input class="input" id="addTokens" type="number" min="1" max="100" value="2"></div>
         </div>
-        <button class="btn primary" type="button" id="addCodes">Generate &amp; stock</button>
+        <button class="btn primary" type="button" id="addCodes">Refill stock</button>
         <div id="newCodes" class="codes" style="margin-top:12px"></div>
       </div>
 

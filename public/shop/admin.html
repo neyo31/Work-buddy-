@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shop Admin · Work Buddy</title>
+  <meta name="theme-color" content="#0a5fbd">
+  <link rel="stylesheet" href="/shop/shop.css">
+</head>
+<body>
+  <div class="admin-wrap">
+    <a href="/shop/" style="color:var(--muted);font-size:13px;font-weight:600">← Shop</a>
+    <h1 style="margin-top:10px">Shop admin</h1>
+    <p class="sub">Payment details, token stock, and code inventory.</p>
+
+    <div id="loginCard" class="admin-card">
+      <h2>Admin login</h2>
+      <div class="field"><label for="id">Email or ID</label><input class="input" id="id" autocomplete="username"></div>
+      <div class="field"><label for="pw">Password</label><input class="input" id="pw" type="password" autocomplete="current-password"></div>
+      <button class="btn primary block" type="button" id="loginBtn">Log in</button>
+      <p class="hint" style="margin-top:10px">Same admin account as the main Work Buddy panel.</p>
+    </div>
+
+    <div id="dash" hidden>
+      <div class="admin-card">
+        <h2>Token stock</h2>
+        <div class="stock-head"><strong id="stockText">—</strong><span id="stockPct"></span></div>
+        <div class="bar"><i id="stockBar"></i></div>
+      </div>
+
+      <div class="admin-card">
+        <h2>Payment details</h2>
+        <div class="field"><label for="phone">Phone number (send money here)</label><input class="input" id="phone" placeholder="+251 9xx xxx xxx"></div>
+        <div class="field"><label for="contact">Contact for custom plans</label><input class="input" id="contact" placeholder="Telegram / phone / email"></div>
+        <div class="field"><label for="qrFile">QR code image</label><input class="input" id="qrFile" type="file" accept="image/*"></div>
+        <div id="qrPreview" style="margin-bottom:12px"></div>
+        <button class="btn primary" type="button" id="savePay">Save payment info</button>
+      </div>
+
+      <div class="admin-card">
+        <h2>Add tokens to stock</h2>
+        <p class="hint" style="margin-bottom:10px">Generate unused redeem codes. Shop delivers them after a verified payment.</p>
+        <div class="row">
+          <div class="field" style="flex:1"><label for="addCount">How many codes</label><input class="input" id="addCount" type="number" min="1" max="100" value="10"></div>
+          <div class="field" style="flex:1"><label for="addTokens">Tokens per code</label><input class="input" id="addTokens" type="number" min="1" max="100" value="2"></div>
+        </div>
+        <button class="btn primary" type="button" id="addCodes">Generate &amp; stock</button>
+        <div id="newCodes" class="codes" style="margin-top:12px"></div>
+      </div>
+
+      <div class="admin-card">
+        <h2>Inventory</h2>
+        <div class="row" style="margin-bottom:10px">
+          <button class="btn" type="button" id="refreshCodes">Refresh</button>
+        </div>
+        <div style="overflow:auto">
+          <table class="table">
+            <thead><tr><th>Code</th><th>Tokens</th><th>Status</th><th></th></tr></thead>
+            <tbody id="codeRows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="admin-card">
+        <h2>Recent payment checks</h2>
+        <div style="overflow:auto">
+          <table class="table">
+            <thead><tr><th>When</th><th>Amount</th><th>Result</th><th>Note</th></tr></thead>
+            <tbody id="claimRows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <button class="btn block" type="button" id="logoutBtn">Sign out</button>
+    </div>
+  </div>
+  <script src="/shop/admin.js"></script>
+</body>
+</html>

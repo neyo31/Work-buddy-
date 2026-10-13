@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Work Buddy · Get Tokens</title>
+  <meta name="theme-color" content="#0a5fbd">
+  <meta name="description" content="Buy Work Buddy tokens. Fast, simple, blue.">
+  <link rel="stylesheet" href="/shop/shop.css">
+</head>
+<body>
+  <div class="bg-blob"></div>
+  <header class="top">
+    <a class="brand" href="/shop/">
+      <img class="buddy-src" src="/shop/buddy.png" alt="" width="40" height="40">
+      <span>Work Buddy</span>
+    </a>
+    <nav>
+      <a href="/">Open app</a>
+      <a href="/shop/admin.html" class="ghost">Admin</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <img class="hero-buddy buddy-src" src="/shop/buddy.png" alt="Work Buddy">
+      <h1>Fuel your helper</h1>
+      <p>Pick a pack. Pay with mobile money. Upload the receipt. Tokens land in seconds.</p>
+    </section>
+
+    <section class="packs" id="packs" aria-label="Token packs"></section>
+
+    <section class="stock card">
+      <div class="stock-head">
+        <strong>Token stock</strong>
+        <span id="stockLabel">—</span>
+      </div>
+      <div class="bar" aria-hidden="true"><i id="stockBar"></i></div>
+      <p class="hint">Codes ready for instant delivery after a verified payment.</p>
+    </section>
+
+    <section class="howto card">
+      <h2>How it works</h2>
+      <ol>
+        <li>Choose a pack</li>
+        <li>Send the exact amount to the number / scan the QR</li>
+        <li>Upload your payment screenshot</li>
+        <li>Buddy checks it and gives you redeem codes</li>
+        <li>Paste a code in the main app under <em>Add tokens</em></li>
+      </ol>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>Already have codes? <a href="/">Open Work Buddy</a></p>
+  </footer>
+
+  <div class="sheet-root" id="sheetRoot" hidden>
+    <div class="scrim" data-close></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h2 id="sheetTitle">Buy pack</h2>
+        <button type="button" class="x" data-close aria-label="Close">×</button>
+      </div>
+      <div class="sheet-body" id="sheetBody"></div>
+    </div>
+  </div>
+
+  <script src="/shop/buddy-data.js"></script>
+  <script src="/shop/shop.js"></script>
+</body>
+</html>

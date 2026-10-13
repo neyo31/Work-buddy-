@@ -66,7 +66,7 @@ module.exports = function registerShop(ctx) {
       'Decide if this screenshot shows a SUCCESSFUL payment of approximately the expected amount.\n' +
       'Reject obvious fakes, edits, wrong amount (off by more than 5%), failed transfers, or unrelated images.\n' +
       'Reply with ONLY compact JSON: {"ok":true|false,"amount":number|null,"confidence":0-1,"reason":"short"}';
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + encodeURIComponent(GEMINI_KEY);
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=' + encodeURIComponent(GEMINI_KEY);
     const r = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

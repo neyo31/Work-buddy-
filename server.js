@@ -257,7 +257,12 @@ async function executeRun(userId, trigger, options = {}) {
     const items = Array.isArray(r.result) ? r.result : [];
     let msg = String(r.message || '').trim();
     let ok = r.success === true;
-    if (!ok && /no open work|no work right now|no quizzes were found|caught up|none had an open/i.test(msg)) ok = true;
+    if (!ok && /no open work|no work right now|no quizzes were found|caught up|none had an open|could not complete any quiz|no open attempt|no questions answered/i.test(msg)) {
+      ok = true;
+      if (/could not complete any quiz/i.test(msg)) {
+        msg = 'No open work right now. Quizzes were found, but none had an open attempt. (No token used.)';
+      }
+    }
     if (ok && !msg) msg = items.length ? 'Done.' : 'No work to do right now.';
     if (!ok && !msg) msg = 'The scan could not finish. Please try again.';
     if (ok && r.charge === true) db.prepare('UPDATE users SET tokens = tokens - ? WHERE id = ? AND tokens >= ?').run(COST, userId, COST);

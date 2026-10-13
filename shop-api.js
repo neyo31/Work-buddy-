@@ -102,6 +102,47 @@ module.exports = function registerShop(ctx) {
     return { ok: true };
   });
 
+  const GEMINI_MODELS = [
+    'gemini-3.8-flash',
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-flash-latest',
+    'gemini-2.0-flash',
+  ];
+
+  function isBusyError(status, msg) {
+    const m = String(msg || '').toLowerCase();
+    return status === 429 || status === 503 || status === 500
+      || m.includes('high demand') || m.includes('resource exhausted')
+      || m.includes('unavailable') || m.includes('try again')
+      || m.includes('overloaded') || m.includes('quota');
+  }
+
+  async function geminiRequest(body, maxAttempts) {
+    let lastErr = 'AI busy';
+    const attempts = maxAttempts || 6;
+    for (let i = 0; i < attempts; i++) {
+      const model = GEMINI_MODELS[i % GEMINI_MODELS.length];
+      const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + encodeURIComponent(GEMINI_KEY);
+      try {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok) return data;
+        const msg = (data.error && data.error.message) || ('HTTP ' + r.status);
+        lastErr = msg;
+        if (!isBusyError(r.status, msg) && r.status !== 404) break;
+      } catch (e) {
+        lastErr = e.message || 'network error';
+      }
+      await new Promise((res) => setTimeout(res, 800 + i * 700));
+    }
+    throw new Error(lastErr);
+  }
+
   async function analyzePaymentScreenshot(dataUrl, expectedAmount, expectedPhone) {
     if (!GEMINI_KEY) {
       return { ok: false, reason: 'Payment AI is not configured (GEMINI_API_KEY missing on the website service).' };
@@ -118,25 +159,24 @@ module.exports = function registerShop(ctx) {
       'Decide if this screenshot shows a SUCCESSFUL payment of approximately the expected amount.\n' +
       'Reject obvious fakes, edits, wrong amount (off by more than 5%), failed transfers, or unrelated images.\n' +
       'Reply with ONLY compact JSON: {"ok":true|false,"amount":number|null,"confidence":0-1,"reason":"short"}';
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=' + encodeURIComponent(GEMINI_KEY);
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
+    let data;
+    try {
+      data = await geminiRequest({
         contents: [{ role: 'user', parts: [
           { text: prompt },
           { inline_data: { mime_type: mime, data: b64 } },
         ]}],
         generationConfig: { temperature: 0.1, maxOutputTokens: 256 },
-      }),
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      return { ok: false, reason: (data.error && data.error.message) || ('Gemini HTTP ' + r.status) };
+      }, 8);
+    } catch (e) {
+      return {
+        ok: false,
+        reason: 'AI is busy right now. Wait a minute and try again, or use Report a problem below so admin can help.',
+      };
     }
     const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '';
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return { ok: false, reason: 'Could not parse verification response.' };
+    if (!jsonMatch) return { ok: false, reason: 'Could not parse verification response. Try again or Report a problem.' };
     try {
       const parsed = JSON.parse(jsonMatch[0]);
       return {
@@ -146,7 +186,7 @@ module.exports = function registerShop(ctx) {
         reason: String(parsed.reason || ''),
       };
     } catch {
-      return { ok: false, reason: 'Could not parse verification response.' };
+      return { ok: false, reason: 'Could not parse verification response. Try again or Report a problem.' };
     }
   }
 

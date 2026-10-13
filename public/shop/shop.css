@@ -171,14 +171,19 @@ main { max-width: 960px; margin: 0 auto; padding: 8px 16px 48px; }
 .pay-meta .amount { font-size: 1.6rem; font-weight: 900; }
 .phone {
   font-size: 1.25rem; font-weight: 800; letter-spacing: .02em;
-  background: rgba(47,140,255,.15); border: 1px solid var(--line);
-  border-radius: 12px; padding: 10px 12px;
+  background: linear-gradient(180deg, rgba(93,255,176,.22), rgba(30,180,110,.12));
+  border: 1.5px solid rgba(93,255,176,.55);
+  color: #b8ffe0;
+  border-radius: 12px; padding: 12px 14px;
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  box-shadow: 0 0 0 1px rgba(93,255,176,.12), 0 8px 20px rgba(20,120,80,.15);
 }
+.phone span { color: #e8fff4; }
 .phone button {
-  border: 0; background: var(--blue); color: #fff; font-weight: 700;
-  padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px;
+  border: 0; background: linear-gradient(180deg, #3dffb0, #1dbf7a); color: #042418; font-weight: 800;
+  padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 12px;
 }
+.phone button:hover { filter: brightness(1.08); }
 .steps { color: var(--muted); font-size: 13px; margin: 4px 0 8px; }
 .upload {
   border: 1.5px dashed var(--line); border-radius: 14px; padding: 18px;

@@ -1,8 +1,8 @@
 name: Keep Work Buddy Awake
 on:
   schedule:
-    # Every 10 minutes — free Render sleeps after ~15 min idle
-    - cron: "*/10 * * * *"
+    # Every 5 minutes (Render free sleeps after ~15 min with no external traffic)
+    - cron: "*/5 * * * *"
   workflow_dispatch: {}
 
 jobs:
@@ -12,18 +12,18 @@ jobs:
     steps:
       - name: Ping website
         run: |
-          for i in 1 2 3; do
-            code=$(curl -s -o /tmp/web.out -w "%{http_code}" --max-time 45 "https://work-buddy-1.onrender.com/" || echo 000)
+          for i in 1 2 3 4; do
+            code=$(curl -s -o /tmp/web.out -w "%{http_code}" --max-time 50 "https://work-buddy-1.onrender.com/health" || echo 000)
             echo "website attempt $i -> $code"
             if [ "$code" = "200" ] || [ "$code" = "304" ]; then exit 0; fi
-            sleep 8
+            sleep 10
           done
           echo "website still not 200"
           exit 0
       - name: Ping bot health
         run: |
-          for i in 1 2 3 4 5; do
-            code=$(curl -s -o /tmp/bot.out -w "%{http_code}" --max-time 60 "https://work-buddy-2.onrender.com/health" || echo 000)
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /tmp/bot.out -w "%{http_code}" --max-time 70 "https://work-buddy-2.onrender.com/health" || echo 000)
             echo "bot attempt $i -> $code"
             cat /tmp/bot.out 2>/dev/null || true
             if [ "$code" = "200" ]; then exit 0; fi

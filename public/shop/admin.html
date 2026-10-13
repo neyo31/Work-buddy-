@@ -30,6 +30,20 @@
       </div>
 
       <div class="admin-card">
+        <h2>Problem reports</h2>
+        <p class="hint" style="margin-bottom:10px">Buyers who could not auto-verify can report here. Check these and send codes manually if payment is real.</p>
+        <div class="row" style="margin-bottom:10px">
+          <button class="btn" type="button" id="refreshReports">Refresh</button>
+        </div>
+        <div style="overflow:auto">
+          <table class="table">
+            <thead><tr><th>When</th><th>Pack</th><th>Contact</th><th>Message</th><th>Status</th></tr></thead>
+            <tbody id="reportRows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="admin-card">
         <h2>Payment details</h2>
         <div class="field"><label for="phone">Phone number (send money here)</label><input class="input" id="phone" placeholder="+251 9xx xxx xxx"></div>
         <div class="field"><label for="contact">Contact for custom plans</label><input class="input" id="contact" placeholder="Telegram / phone / email"></div>

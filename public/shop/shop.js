@@ -14,6 +14,7 @@
   const sheetTitle = document.getElementById('sheetTitle');
   const sheetBody = document.getElementById('sheetBody');
   let payInfo = { phone: '', qrUrl: '', contact: '' };
+  let lastShotB64 = '';
 
   function toast(text, isError) {
     document.querySelectorAll('.toast').forEach((t) => t.remove());
@@ -32,7 +33,7 @@
     return data;
   }
   function escapeHtml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;' }[c]));
+    return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
   function renderPacks() {
     packsEl.replaceChildren(...PACKS.map((p) => {
@@ -55,7 +56,52 @@
   }
   sheetRoot.addEventListener('click', (e) => { if (e.target.matches('[data-close]')) closeSheet(); });
 
+  function reportBlock(pack) {
+    return (
+      '<div class="report-box" id="reportBox">' +
+      '  <button type="button" class="report-toggle" id="reportToggle">Report a problem to admin</button>' +
+      '  <div class="report-form" id="reportForm" hidden>' +
+      '    <p class="steps">Auto-check failed or stuck? Send a short note. Include your phone or Telegram so we can reach you.</p>' +
+      '    <input class="input report-input" id="reportContact" placeholder="Your phone or Telegram (optional)">' +
+      '    <textarea class="input report-input" id="reportMsg" rows="3" placeholder="What went wrong? e.g. I sent 100 ETB but verify failed"></textarea>' +
+      '    <button type="button" class="btn primary block" id="reportSend">Send report</button>' +
+      '  </div>' +
+      '</div>'
+    );
+  }
+
+  function wireReport(wrap, pack) {
+    const toggle = wrap.querySelector('#reportToggle');
+    const form = wrap.querySelector('#reportForm');
+    const send = wrap.querySelector('#reportSend');
+    if (!toggle || !form || !send) return;
+    toggle.addEventListener('click', () => { form.hidden = !form.hidden; });
+    send.addEventListener('click', async () => {
+      const message = (wrap.querySelector('#reportMsg')?.value || '').trim();
+      const contact = (wrap.querySelector('#reportContact')?.value || '').trim();
+      if (message.length < 5) return toast('Write a short description of the problem', true);
+      send.disabled = true;
+      try {
+        await api('/api/shop/report', 'POST', {
+          packageId: pack.id,
+          tokens: pack.tokens,
+          amount: pack.price,
+          currency: pack.currency,
+          message,
+          contact,
+          screenshot: lastShotB64 || undefined,
+        });
+        form.innerHTML = '<p class="steps" style="color:var(--ok)">Report sent. Admin will review it.</p>';
+        toast('Report sent to admin');
+      } catch (e) {
+        toast(e.message || 'Could not send report', true);
+        send.disabled = false;
+      }
+    });
+  }
+
   function openBuy(pack) {
+    lastShotB64 = '';
     if (pack.contact) {
       const wrap = document.createElement('div');
       wrap.innerHTML = '<p class="steps">Need a school plan, bulk tokens, or something custom? Reach out and we will sort a pack for you.</p>' +
@@ -92,23 +138,26 @@
       '  <span>PNG or JPG · after you send the money</span>' +
       '  <input type="file" accept="image/*" id="shotInput">' +
       '</label>' +
-      '<div id="verifyZone"></div>';
+      '<div id="verifyZone"></div>' +
+      reportBlock(pack);
     openSheet('Buy', wrap);
+    wireReport(wrap, pack);
     wrap.querySelector('#copyPhone')?.addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(payInfo.phone || ''); toast('Phone copied'); } catch { toast('Could not copy', true); }
     });
     wrap.querySelector('#shotInput').addEventListener('change', () => {
       const file = wrap.querySelector('#shotInput').files?.[0];
-      if (file) verifyShot(pack, file, wrap.querySelector('#verifyZone'), wrap.querySelector('#uploadBox'));
+      if (file) verifyShot(pack, file, wrap.querySelector('#verifyZone'), wrap.querySelector('#uploadBox'), wrap);
     });
   }
 
-  async function verifyShot(pack, file, zone, uploadBox) {
+  async function verifyShot(pack, file, zone, uploadBox, wrap) {
     if (file.size > 4000000) return toast('Image too large (max 4MB)', true);
     uploadBox.hidden = true;
     const buddy = window.BUDDY_SRC || '/shop/buddy.svg';
     zone.innerHTML = '<div class="analyzing"><img src="' + buddy + '" alt="Buddy thinking"><div class="dots">Buddy is checking your payment…</div><div class="loader"><i></i></div><p class="steps">Looking at amount, number, and receipt details</p></div>';
     const b64 = await new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(String(r.result || '')); r.onerror = reject; r.readAsDataURL(file); });
+    lastShotB64 = b64;
     try {
       const r = await api('/api/shop/verify', 'POST', { packageId: pack.id, tokens: pack.tokens, amount: pack.price, currency: pack.currency, screenshot: b64 });
       if (r.ok && Array.isArray(r.codes) && r.codes.length) {
@@ -119,12 +168,20 @@
           try { await navigator.clipboard.writeText(btn.getAttribute('data-code')); toast('Code copied'); } catch { toast('Copy failed', true); }
         }));
       } else {
-        zone.innerHTML = '<div class="result-fail"><strong>Could not verify</strong><p class="steps">' + escapeHtml(r.message || 'Try a clearer screenshot.') + '</p><button type="button" class="btn primary block" id="retryShot" style="margin-top:12px">Try another photo</button></div>';
+        zone.innerHTML = '<div class="result-fail"><strong>Could not verify</strong><p class="steps">' + escapeHtml(r.message || 'Try a clearer screenshot.') +
+          '</p><button type="button" class="btn primary block" id="retryShot" style="margin-top:12px">Try another photo</button>' +
+          '<p class="steps" style="margin-top:10px">Still stuck? Use <strong>Report a problem</strong> below.</p></div>';
         zone.querySelector('#retryShot')?.addEventListener('click', () => { uploadBox.hidden = false; zone.replaceChildren(); });
+        const form = wrap?.querySelector('#reportForm');
+        if (form) form.hidden = false;
       }
     } catch (e) {
-      zone.innerHTML = '<div class="result-fail"><strong>Check failed</strong><p class="steps">' + escapeHtml(e.message) + '</p><button type="button" class="btn primary block" id="retryShot" style="margin-top:12px">Try again</button></div>';
+      zone.innerHTML = '<div class="result-fail"><strong>Check failed</strong><p class="steps">' + escapeHtml(e.message) +
+        '</p><button type="button" class="btn primary block" id="retryShot" style="margin-top:12px">Try again</button>' +
+        '<p class="steps" style="margin-top:10px">Still stuck? Use <strong>Report a problem</strong> below.</p></div>';
       zone.querySelector('#retryShot')?.addEventListener('click', () => { uploadBox.hidden = false; zone.replaceChildren(); });
+      const form = wrap?.querySelector('#reportForm');
+      if (form) form.hidden = false;
     }
   }
 

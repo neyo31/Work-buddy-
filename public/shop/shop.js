@@ -167,6 +167,12 @@
         zone.querySelectorAll('[data-code]').forEach((btn) => btn.addEventListener('click', async () => {
           try { await navigator.clipboard.writeText(btn.getAttribute('data-code')); toast('Code copied'); } catch { toast('Copy failed', true); }
         }));
+      } else if (r.pending) {
+        zone.innerHTML = '<div class="result-ok" style="border-color:rgba(255,209,102,.45);background:rgba(255,209,102,.1)"><strong>Saved for admin review</strong><p class="steps">' +
+          escapeHtml(r.message || 'AI is busy. Your payment was queued — admin will send codes after checking.') +
+          '</p><p class="steps" style="margin-top:10px">Leave your phone or Telegram below under <strong>Report a problem</strong> so we can reach you.</p></div>';
+        const form = wrap?.querySelector('#reportForm');
+        if (form) form.hidden = false;
       } else {
         zone.innerHTML = '<div class="result-fail"><strong>Could not verify</strong><p class="steps">' + escapeHtml(r.message || 'Try a clearer screenshot.') +
           '</p><button type="button" class="btn primary block" id="retryShot" style="margin-top:12px">Try another photo</button>' +

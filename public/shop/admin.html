@@ -77,13 +77,18 @@
       </div>
 
       <div class="admin-card">
-        <h2>Recent payment checks</h2>
+        <h2>Payment checks & pending</h2>
+        <p class="hint" style="margin-bottom:10px">When AI is busy, payments land here as <strong>pending</strong>. Approve to issue real codes, then send the codes to the buyer.</p>
+        <div class="row" style="margin-bottom:10px">
+          <button class="btn" type="button" id="refreshClaims">Refresh</button>
+        </div>
         <div style="overflow:auto">
           <table class="table">
-            <thead><tr><th>When</th><th>Amount</th><th>Result</th><th>Note</th></tr></thead>
+            <thead><tr><th>When</th><th>Pack</th><th>Status</th><th>Note / contact</th><th></th></tr></thead>
             <tbody id="claimRows"></tbody>
           </table>
         </div>
+        <div id="approveCodes" class="codes" style="margin-top:12px"></div>
       </div>
 
       <button class="btn block" type="button" id="logoutBtn">Sign out</button>

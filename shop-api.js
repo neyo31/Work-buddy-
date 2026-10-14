@@ -6,6 +6,9 @@ module.exports = function registerShop(ctx) {
   const GEMINI_KEY = env('GEMINI_API_KEY');
   try { db.exec('CREATE TABLE IF NOT EXISTS payment_claims (id INTEGER PRIMARY KEY AUTOINCREMENT, package_id TEXT, amount REAL, currency TEXT, tokens INTEGER, ok INTEGER NOT NULL DEFAULT 0, note TEXT, codes_json TEXT, created_at INTEGER NOT NULL)'); } catch (e) {}
   try { db.exec('ALTER TABLE codes ADD COLUMN distributed_at INTEGER'); } catch (e) {}
+  try { db.exec('ALTER TABLE payment_claims ADD COLUMN screenshot TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE payment_claims ADD COLUMN contact TEXT'); } catch (e) {}
+  try { db.exec('ALTER TABLE payment_claims ADD COLUMN status TEXT'); } catch (e) {}
   try {
     db.exec(`CREATE TABLE IF NOT EXISTS shop_reports (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -20,6 +23,36 @@ module.exports = function registerShop(ctx) {
       created_at INTEGER NOT NULL
     )`);
   } catch (e) {}
+
+  function issueCodesForTokens(tokensNeeded) {
+    const issued = [];
+    tx(() => {
+      const exact = db.prepare('SELECT code, tokens FROM codes WHERE used_at IS NULL AND distributed_at IS NULL AND tokens = ? ORDER BY created_at LIMIT 20').all(tokensNeeded);
+      let remaining = tokensNeeded;
+      for (const row of exact) {
+        if (remaining <= 0) break;
+        if (row.tokens > remaining) continue;
+        issued.push(row.code);
+        remaining -= row.tokens;
+        db.prepare('UPDATE codes SET distributed_at = ? WHERE code = ? AND distributed_at IS NULL AND used_at IS NULL').run(Date.now(), row.code);
+      }
+      if (remaining > 0) {
+        const pool = db.prepare('SELECT code, tokens FROM codes WHERE used_at IS NULL AND distributed_at IS NULL ORDER BY tokens DESC, created_at LIMIT 50').all();
+        for (const row of pool) {
+          if (remaining <= 0) break;
+          if (row.tokens > remaining) continue;
+          if (issued.includes(row.code)) continue;
+          issued.push(row.code);
+          remaining -= row.tokens;
+          db.prepare('UPDATE codes SET distributed_at = ? WHERE code = ? AND distributed_at IS NULL AND used_at IS NULL').run(Date.now(), row.code);
+        }
+      }
+      if (remaining > 0) {
+        throw new HttpError(409, 'Not enough token codes in stock. Refill stock first, then approve.');
+      }
+    });
+    return issued;
+  }
 
   route('GET', '/api/shop/info', null, () => {
     const unused = db.prepare('SELECT COUNT(*) AS c FROM codes WHERE used_at IS NULL AND distributed_at IS NULL').get().c;
@@ -61,8 +94,39 @@ module.exports = function registerShop(ctx) {
     return { ok: true };
   });
   route('GET', '/api/shop/admin/claims', 'admin', () => ({
-    claims: db.prepare('SELECT id, package_id AS packageId, amount, currency, tokens, ok, note, created_at AS createdAt FROM payment_claims ORDER BY id DESC LIMIT 50').all(),
+    claims: db.prepare(
+      `SELECT id, package_id AS packageId, amount, currency, tokens, ok, note, contact,
+              CASE WHEN screenshot IS NOT NULL AND screenshot != '' THEN 1 ELSE 0 END AS hasShot,
+              COALESCE(status, CASE WHEN ok = 1 THEN 'done' WHEN ok = 0 THEN 'rejected' ELSE 'pending' END) AS status,
+              codes_json AS codesJson, created_at AS createdAt
+       FROM payment_claims ORDER BY id DESC LIMIT 80`
+    ).all(),
   }));
+
+  route('POST', '/api/shop/admin/claims/approve', 'admin', ({ body }) => {
+    const id = Number(body.id);
+    if (!id) bad('Invalid claim.');
+    const row = db.prepare('SELECT * FROM payment_claims WHERE id = ?').get(id);
+    if (!row) bad('Claim not found.');
+    if (row.ok === 1) bad('Already approved.');
+    const tokensNeeded = Math.max(1, Math.min(100, Number(row.tokens) || 0));
+    if (!tokensNeeded) bad('Claim has no token amount.');
+    const issued = issueCodesForTokens(tokensNeeded);
+    db.prepare(
+      `UPDATE payment_claims SET ok = 1, status = 'done', note = ?, codes_json = ? WHERE id = ?`
+    ).run(('Approved by admin. ' + (row.note || '')).slice(0, 500), JSON.stringify(issued), id);
+    return { ok: true, codes: issued, message: 'Approved. Codes issued — send them to the buyer.' };
+  });
+
+  route('POST', '/api/shop/admin/claims/reject', 'admin', ({ body }) => {
+    const id = Number(body.id);
+    if (!id) bad('Invalid claim.');
+    const r = db.prepare(`UPDATE payment_claims SET ok = 0, status = 'rejected', note = ? WHERE id = ?`).run(
+      (clean(body.note) || 'Rejected by admin').slice(0, 500), id
+    );
+    if (!r.changes) bad('Claim not found.');
+    return { ok: true };
+  });
 
   route('POST', '/api/shop/report', null, async ({ req, body }) => {
     limit('shop-report|' + clientIp(req), 6, 600000);
@@ -80,6 +144,11 @@ module.exports = function registerShop(ctx) {
     db.prepare(
       'INSERT INTO shop_reports(package_id,amount,currency,tokens,contact,message,screenshot,status,created_at) VALUES(?,?,?,?,?,?,?,?,?)'
     ).run(packageId, amount, currency, tokens, contact, message, screenshot || null, 'open', Date.now());
+    if (tokens > 0 && amount > 0) {
+      db.prepare(
+        'INSERT INTO payment_claims(package_id,amount,currency,tokens,ok,note,codes_json,created_at,screenshot,contact,status) VALUES(?,?,?,?,0,?,?,?,?,?,?)'
+      ).run(packageId, amount, currency, tokens, ('Buyer report: ' + message).slice(0, 500), '[]', Date.now(), screenshot || null, contact, 'pending');
+    }
     return { ok: true, message: 'Report sent. Admin will review and help you.' };
   });
 
@@ -103,10 +172,10 @@ module.exports = function registerShop(ctx) {
   });
 
   const GEMINI_MODELS = [
-    'gemini-3.8-flash',
     'gemini-2.5-flash',
     'gemini-2.5-flash-lite',
     'gemini-flash-latest',
+    'gemini-3.8-flash',
     'gemini-2.0-flash',
   ];
 
@@ -115,7 +184,7 @@ module.exports = function registerShop(ctx) {
     return status === 429 || status === 503 || status === 500
       || m.includes('high demand') || m.includes('resource exhausted')
       || m.includes('unavailable') || m.includes('try again')
-      || m.includes('overloaded') || m.includes('quota');
+      || m.includes('overloaded') || m.includes('quota') || m.includes('busy');
   }
 
   async function geminiRequest(body, maxAttempts) {
@@ -138,14 +207,14 @@ module.exports = function registerShop(ctx) {
       } catch (e) {
         lastErr = e.message || 'network error';
       }
-      await new Promise((res) => setTimeout(res, 800 + i * 700));
+      await new Promise((res) => setTimeout(res, 600 + i * 500));
     }
     throw new Error(lastErr);
   }
 
   async function analyzePaymentScreenshot(dataUrl, expectedAmount, expectedPhone) {
     if (!GEMINI_KEY) {
-      return { ok: false, reason: 'Payment AI is not configured (GEMINI_API_KEY missing on the website service).' };
+      return { ok: false, busy: true, reason: 'Payment AI not configured — queued for admin.' };
     }
     const m = String(dataUrl || '').match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
     if (!m) return { ok: false, reason: 'Invalid screenshot format.' };
@@ -167,16 +236,13 @@ module.exports = function registerShop(ctx) {
           { inline_data: { mime_type: mime, data: b64 } },
         ]}],
         generationConfig: { temperature: 0.1, maxOutputTokens: 256 },
-      }, 8);
+      }, 5);
     } catch (e) {
-      return {
-        ok: false,
-        reason: 'AI is busy right now. Wait a minute and try again, or use Report a problem below so admin can help.',
-      };
+      return { ok: false, busy: true, reason: String(e.message || 'AI busy') };
     }
     const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '';
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return { ok: false, reason: 'Could not parse verification response. Try again or Report a problem.' };
+    if (!jsonMatch) return { ok: false, busy: true, reason: 'Could not parse AI response' };
     try {
       const parsed = JSON.parse(jsonMatch[0]);
       return {
@@ -186,7 +252,7 @@ module.exports = function registerShop(ctx) {
         reason: String(parsed.reason || ''),
       };
     } catch {
-      return { ok: false, reason: 'Could not parse verification response. Try again or Report a problem.' };
+      return { ok: false, busy: true, reason: 'Could not parse AI response' };
     }
   }
 
@@ -196,47 +262,53 @@ module.exports = function registerShop(ctx) {
     const tokensNeeded = Math.max(1, Math.min(100, Number(body.tokens) || 0));
     const amount = Number(body.amount);
     const currency = clean(body.currency) || 'ETB';
+    const contact = clean(body.contact).slice(0, 200);
     const screenshot = String(body.screenshot || '');
     if (!packageId || !amount || !screenshot) bad('Missing payment details.');
     if (screenshot.length > 6000000) bad('Screenshot too large.');
 
     const phone = getSetting('pay_phone', '');
     const verdict = await analyzePaymentScreenshot(screenshot, amount, phone);
-    if (!verdict.ok) {
-      db.prepare('INSERT INTO payment_claims(package_id,amount,currency,tokens,ok,note,codes_json,created_at) VALUES(?,?,?,?,0,?,?,?)')
-        .run(packageId, amount, currency, tokensNeeded, (verdict.reason || 'rejected').slice(0, 500), '[]', Date.now());
-      return { ok: false, message: verdict.reason || 'Payment could not be verified. Use a clear success screenshot.' };
+
+    if (!verdict.ok && verdict.busy) {
+      const info = db.prepare(
+        'INSERT INTO payment_claims(package_id,amount,currency,tokens,ok,note,codes_json,created_at,screenshot,contact,status) VALUES(?,?,?,?,0,?,?,?,?,?,?)'
+      ).run(
+        packageId, amount, currency, tokensNeeded,
+        ('Queued: ' + (verdict.reason || 'AI busy')).slice(0, 500),
+        '[]', Date.now(), screenshot, contact || null, 'pending'
+      );
+      return {
+        ok: false,
+        pending: true,
+        claimId: info.lastInsertRowid,
+        message: 'Auto-check is busy right now. Your payment was saved for admin review. You will get codes after approval — add your phone/Telegram in Report a problem if you have not already.',
+      };
     }
 
-    const issued = [];
-    tx(() => {
-      const exact = db.prepare('SELECT code, tokens FROM codes WHERE used_at IS NULL AND distributed_at IS NULL AND tokens = ? ORDER BY created_at LIMIT 20').all(tokensNeeded);
-      let remaining = tokensNeeded;
-      for (const row of exact) {
-        if (remaining <= 0) break;
-        if (row.tokens > remaining) continue;
-        issued.push(row.code);
-        remaining -= row.tokens;
-        db.prepare('UPDATE codes SET distributed_at = ? WHERE code = ? AND distributed_at IS NULL AND used_at IS NULL').run(Date.now(), row.code);
-      }
-      if (remaining > 0) {
-        const pool = db.prepare('SELECT code, tokens FROM codes WHERE used_at IS NULL AND distributed_at IS NULL ORDER BY tokens DESC, created_at LIMIT 50').all();
-        for (const row of pool) {
-          if (remaining <= 0) break;
-          if (row.tokens > remaining) continue;
-          if (issued.includes(row.code)) continue;
-          issued.push(row.code);
-          remaining -= row.tokens;
-          db.prepare('UPDATE codes SET distributed_at = ? WHERE code = ? AND distributed_at IS NULL AND used_at IS NULL').run(Date.now(), row.code);
-        }
-      }
-      if (remaining > 0) {
-        throw new HttpError(409, 'Not enough token codes in stock for this pack. Admin needs to generate more.');
-      }
-    });
+    if (!verdict.ok) {
+      db.prepare(
+        'INSERT INTO payment_claims(package_id,amount,currency,tokens,ok,note,codes_json,created_at,screenshot,contact,status) VALUES(?,?,?,?,0,?,?,?,?,?,?)'
+      ).run(
+        packageId, amount, currency, tokensNeeded,
+        (verdict.reason || 'rejected').slice(0, 500),
+        '[]', Date.now(), screenshot, contact || null, 'rejected'
+      );
+      return {
+        ok: false,
+        pending: false,
+        message: (verdict.reason || 'Payment could not be verified.') + ' If you already paid, use Report a problem below so admin can check.',
+      };
+    }
 
-    db.prepare('INSERT INTO payment_claims(package_id,amount,currency,tokens,ok,note,codes_json,created_at) VALUES(?,?,?,?,1,?,?,?)')
-      .run(packageId, amount, currency, tokensNeeded, (verdict.reason || 'verified').slice(0, 500), JSON.stringify(issued), Date.now());
+    const issued = issueCodesForTokens(tokensNeeded);
+    db.prepare(
+      'INSERT INTO payment_claims(package_id,amount,currency,tokens,ok,note,codes_json,created_at,screenshot,contact,status) VALUES(?,?,?,?,1,?,?,?,?,?,?)'
+    ).run(
+      packageId, amount, currency, tokensNeeded,
+      (verdict.reason || 'verified').slice(0, 500),
+      JSON.stringify(issued), Date.now(), screenshot, contact || null, 'done'
+    );
 
     return {
       ok: true,

@@ -75,6 +75,7 @@
     } catch (e) { toast(e.message, true); }
   });
   $('refreshCodes').addEventListener('click', () => loadCodes());
+  if ($('refreshClaims')) $('refreshClaims').addEventListener('click', () => loadClaims());
   $('refreshReports').addEventListener('click', () => loadReports());
   async function loadPay() {
     const r = await api('/api/shop/admin/payment');
@@ -119,15 +120,41 @@
     try {
       const r = await api('/api/shop/admin/claims');
       const rows = r.claims || [];
-      $('claimRows').innerHTML = rows.map((c) =>
-        '<tr><td>' + (c.createdAt ? new Date(c.createdAt).toLocaleString() : '—') +
-        '</td><td>' + (c.amount || '—') + ' ' + (c.currency || '') +
-        '</td><td>' + (c.ok ? 'OK' : 'Fail') +
-        '</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis">' +
-        String(c.note || '').slice(0, 80) + '</td></tr>'
-      ).join('') || '<tr><td colspan="4">No checks yet</td></tr>';
+      $('claimRows').innerHTML = rows.map((c) => {
+        const when = c.createdAt ? new Date(c.createdAt).toLocaleString() : '—';
+        const pack = (c.packageId || '—') + ' · ' + (c.amount || '—') + ' ' + (c.currency || '') + (c.tokens ? (' · ' + c.tokens + ' tok') : '');
+        const st = c.status || (c.ok ? 'done' : 'rejected');
+        const note = String((c.contact ? (c.contact + ' · ') : '') + (c.note || '')).slice(0, 90).replace(/</g, '<');
+        const actions = st === 'pending'
+          ? '<button class="btn primary small" type="button" data-approve="' + c.id + '">Approve</button> ' +
+            '<button class="btn danger small" type="button" data-reject="' + c.id + '">Reject</button>'
+          : (st === 'done' ? '✓' : '—');
+        return '<tr><td style="white-space:nowrap;font-size:12px">' + when + '</td><td>' + pack + (c.hasShot ? ' 📷' : '') +
+          '</td><td><strong>' + st + '</strong></td><td style="max-width:180px">' + note +
+          '</td><td style="white-space:nowrap">' + actions + '</td></tr>';
+      }).join('') || '<tr><td colspan="5">No checks yet</td></tr>';
+      $('claimRows').querySelectorAll('[data-approve]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Approve and issue codes for this payment?')) return;
+          try {
+            const r = await api('/api/shop/admin/claims/approve', 'POST', { id: Number(btn.getAttribute('data-approve')) });
+            $('approveCodes').innerHTML = (r.codes || []).map((c) => '<div class="code"><span>' + c + '</span></div>').join('') || '';
+            toast('Approved — copy codes and send to buyer');
+            await loadClaims(); await loadStock();
+          } catch (e) { toast(e.message, true); }
+        });
+      });
+      $('claimRows').querySelectorAll('[data-reject]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          try {
+            await api('/api/shop/admin/claims/reject', 'POST', { id: Number(btn.getAttribute('data-reject')), note: 'Rejected by admin' });
+            toast('Rejected');
+            await loadClaims();
+          } catch (e) { toast(e.message, true); }
+        });
+      });
     } catch {
-      $('claimRows').innerHTML = '<tr><td colspan="4">—</td></tr>';
+      $('claimRows').innerHTML = '<tr><td colspan="5">—</td></tr>';
     }
   }
   async function loadReports() {
